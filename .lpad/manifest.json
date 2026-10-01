@@ -22,7 +22,7 @@
         "role": "api",
         "rootDir": ".",
         "runtime": "java",
-        "routes": ["/api/"],
+        "routes": ["/api/", "/actuator/"],
         "healthCheckPath": "/actuator/health"
       },
       {
