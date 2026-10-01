@@ -21,12 +21,12 @@ flowchart TD
 
 ### Component responsibilities
 
-| Component | Responsibility |
-| --- | --- |
-| Next.js | Public, indexable information and provider-discovery pages; authenticated patient, provider, and administrator user experiences. |
-| Spring Boot | The application authority for identity, authorization, relationships, business rules, validation, clinical workflows, transactions, audit events, and integrations. |
-| PostgreSQL | Durable application data, including patient and provider data, appointments, records, messages, medication schedules, vitals, and service requests, subject to approved retention and privacy requirements. |
-| HTTPS reverse proxy | Routes public web traffic and `/api/v1/*` traffic under the agreed domain; applies TLS and deployment-level routing policy. |
+| Component           | Responsibility                                                                                                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Next.js             | Public, indexable information and provider-discovery pages; authenticated patient, provider, and administrator user experiences.                                                                            |
+| Spring Boot         | The application authority for identity, authorization, relationships, business rules, validation, clinical workflows, transactions, audit events, and integrations.                                         |
+| PostgreSQL          | Durable application data, including patient and provider data, appointments, records, messages, medication schedules, vitals, and service requests, subject to approved retention and privacy requirements. |
+| HTTPS reverse proxy | Routes public web traffic and `/api/v1/*` traffic under the agreed domain; applies TLS and deployment-level routing policy.                                                                                 |
 
 The frontend is never the security or business-rule authority. Hiding a button or protecting a route in Next.js is useful UX, but it is not authorization. Spring Boot must authenticate and authorize every protected operation before data is read or changed.
 
