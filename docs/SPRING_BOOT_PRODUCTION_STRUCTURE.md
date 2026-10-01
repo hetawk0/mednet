@@ -11,6 +11,8 @@ The goal is to keep the codebase:
 - consistent across teams
 - understandable to future engineers
 
+For the full-stack recommendation, deployment boundaries, security model and build-tool status, see the [Production Architecture Guide](PRODUCTION_ARCHITECTURE_GUIDE.md). This structure document's sample tree describes a Maven layout; the current starter has a Maven POM but no Maven Wrapper. The supplied architecture recommendation prefers Gradle Kotlin DSL with its wrapper, and that migration is not applied. Decide on one build system before substantial backend feature work and do not maintain parallel Maven and Gradle builds.
+
 ---
 
 ## 1. Core principles

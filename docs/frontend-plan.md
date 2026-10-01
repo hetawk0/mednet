@@ -1,6 +1,6 @@
 # MedNet Frontend Plan
 
-This document is the dedicated frontend plan for MedNet. It complements the product requirements in [req.md](req.md) and focuses only on the user experience, routes, frontend architecture, responsiveness, accessibility, and product UX flow.
+This document is the dedicated frontend plan for MedNet. It complements the product requirements in [req.md](req.md) and focuses only on the user experience, routes, frontend architecture, responsiveness, accessibility, and product UX flow. See the [Production Architecture Guide](PRODUCTION_ARCHITECTURE_GUIDE.md) for the full-stack boundary and deployment model.
 
 ---
 
@@ -18,7 +18,7 @@ The frontend should be built as a mobile-first, low-bandwidth, accessibility-con
 - strong accessibility defaults
 - dark/light mode support
 
-This keeps the interface modern and production-ready without locking the team into a heavy native app before the platform decision is confirmed.
+This supports the SEO and public-discovery needs in the supplied recommendation while allowing authenticated user flows in the same web application. It is a provisional web candidate only; OQ-50 remains open until the client confirms web, native mobile, or both.
 
 ---
 
@@ -28,10 +28,14 @@ This keeps the interface modern and production-ready without locking the team in
 
 ```text
 app/
-├── (main)/
+├── (public)/
 │   ├── page.tsx
 │   ├── about/page.tsx
-│   └── support/page.tsx
+│   ├── services/page.tsx
+│   ├── providers/page.tsx
+│   ├── health-resources/page.tsx
+│   ├── contact/page.tsx
+│   └── faq/page.tsx
 ├── (auth)/
 │   ├── login/page.tsx
 │   ├── register/page.tsx
@@ -57,8 +61,6 @@ app/
 │   ├── providers/page.tsx
 │   ├── reports/page.tsx
 │   └── audit/page.tsx
-└── api/
-    └── v1/
 ```
 
 ### Why this structure works
@@ -67,6 +69,10 @@ app/
 - It keeps route shells simple and consistent.
 - It makes role-specific security easier to enforce.
 - It reduces layout duplication.
+
+Public pages should provide appropriate metadata and be indexable where intended. Authenticated pages must validate the session before rendering protected content and must not expose patient data through public metadata or shared caches.
+
+The authoritative `/api/v1` API belongs to Spring Boot. The browser may call it through the agreed same-domain HTTPS reverse-proxy route. Next.js route handlers, if introduced, are not a substitute for backend authentication, relationship authorization, or clinical business rules.
 
 ---
 

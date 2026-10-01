@@ -1,6 +1,6 @@
 # MedNet Backend and API Plan
 
-This document is the dedicated backend and API design plan for MedNet. It complements the product-level requirements in [req.md](req.md) and focuses only on the server architecture, API contract, security model, domain boundaries, and production quality standards.
+This document is the dedicated backend and API design plan for MedNet. It complements the product-level requirements in [req.md](req.md) and focuses only on the server architecture, API contract, security model, domain boundaries, and production quality standards. The cross-stack boundaries and deployment direction are consolidated in the [Production Architecture Guide](PRODUCTION_ARCHITECTURE_GUIDE.md).
 
 ---
 
@@ -20,6 +20,7 @@ MedNet should start as a modular monolith in Java 21 with Spring Boot. This give
 - Spring Validation + Bean Validation
 - OpenAPI / Swagger for API documentation
 - JUnit 5 + Spring test support + Testcontainers
+- Gradle with Kotlin DSL and the committed Gradle Wrapper is the supplied build-system recommendation. The current starter uses Maven; choose whether to retain or migrate it before substantial feature work, and do not maintain two authoritative builds.
 
 ### Why this is appropriate
 
@@ -276,3 +277,14 @@ Use PostgreSQL as the core persistence engine.
 8. admin approvals and reporting
 
 These are the correct backend starting points based on the product requirements in [req.md](req.md).
+
+## 10. Full-stack and operational guardrails
+
+- Spring Boot owns authentication, authorization, patient/provider relationship checks, business validation, clinical workflows, transactions, and audit behavior. The frontend is a client, never an authority.
+- Every patient-specific operation must check both the actor's role and the actor-patient relationship and its scope. Never authorize solely from a client-supplied patient ID or a frontend route guard.
+- Keep the authoritative REST API in Spring Boot under `/api/v1`; publish the contract with OpenAPI. Next.js route handlers must not duplicate core healthcare business rules.
+- Keep audit metadata separate from ordinary application logs. Include a request ID across API responses and structured operational logs, and exclude credentials, tokens, and clinical payloads.
+- Deploy the web app, API, and PostgreSQL as clearly bounded components behind HTTPS routing. Start without microservices, Kubernetes, Kafka, or a service mesh unless measured requirements justify them.
+- Plan unit, API/security, database integration, and end-to-end tests. Use Testcontainers for PostgreSQL-backed behavior and verify health/readiness in deployment checks.
+
+These remain engineering recommendations. Role definitions, identity and verification, patient-record visibility, client platform, hosting, and regulated workflows remain subject to the open questions in [req.md](req.md).

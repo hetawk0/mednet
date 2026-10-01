@@ -20,7 +20,7 @@ MedNet is intended to connect patients, healthcare professionals, hospitals, lab
 
 This document organizes the existing product draft into traceable requirements while separating statements attributed to the client source, derived behaviour and unresolved decisions. Its CONFIRMED labels are inherited from the earlier draft and have not been independently verified against the missing `MedNet.docx`; verify them with the sponsor before approval. This is not yet a build baseline: resolve the blocking questions in [Section 19](#19-open-questions-requiring-client-confirmation), especially scope, user roles, target platform, clinical workflows, payments, emergency handling and regulation.
 
-**Provisional engineering direction:** Java 21 LTS, Spring Boot and PostgreSQL as a modular monolith. This is an engineering recommendation, not an approved product constraint. Select the patient-facing web/mobile platform only after the client answers OQ-50.
+**Provisional engineering direction:** Java 21 LTS, Spring Boot and PostgreSQL as a modular monolith. Next.js is the current web-client recommendation because the public site needs SEO as well as authenticated application flows, but the platform is not selected until the client answers OQ-50. See the [Production Architecture Guide](PRODUCTION_ARCHITECTURE_GUIDE.md); it is engineering guidance, not approved product scope.
 
 ## Contents
 
@@ -729,7 +729,9 @@ This section is an engineering recommendation for planning, not client-approved 
 | Persistence and schema changes   | Spring Data JPA/Hibernate with versioned Flyway migrations.                                                | Provides explicit schema history and controlled deployments; avoid ad hoc production schema edits.                                                                                |
 | Authentication and authorization | Spring Security; combine role checks with patient/provider relationship checks on every clinical resource. | A role alone must not grant access to every patient's record. Registration and verification remain subject to OQ-04–OQ-07.                                                        |
 | Testing                          | JUnit 5, Spring test support and Testcontainers for database integration tests.                            | Exercises authorization and transaction behaviour against a real PostgreSQL-compatible engine.                                                                                    |
-| Patient-facing clients           | Not selected. Resolve web, mobile or both under OQ-50 before choosing client technology.                   | A Java backend does not determine whether the patient interface is web or native mobile.                                                                                          |
+| Patient-facing clients           | Next.js, TypeScript and the App Router are the recommended web candidate; final client platform remains open under OQ-50. | SEO, metadata and public discovery can share a web framework with authenticated patient, provider and administrator flows. The client may still choose web, native mobile or both. |
+| Build system                     | Gradle with Kotlin DSL and the committed Gradle Wrapper is the supplied architecture recommendation.       | The current starter uses Maven. Resolve whether to retain Maven or migrate before adding substantial backend modules; keep one authoritative build system.                           |
+| Deployment shape                  | Separate web, API and database components behind HTTPS routing; begin without Kubernetes or microservices. | Keeps one product and domain experience while retaining clear deployment and security boundaries. Confirm hosting and data residency before production selection.                    |
 | External services                | Integrate proven video, SMS, email and payment services only after scope and providers are agreed.         | Avoid building regulated, high-bandwidth or payment infrastructure without cost, provider and failure-mode decisions.                                                             |
 
 ### Framework Options
@@ -742,12 +744,18 @@ This section is an engineering recommendation for planning, not client-approved 
 
 ### Architecture Guardrails
 
+- Treat Spring Boot as the authority for security and business rules; frontend route guards improve UX but never grant access.
+- Apply role and patient/provider relationship checks to every protected clinical resource. Treat client-supplied resource identifiers as untrusted.
 - Keep patient identity, provider directory, appointments, messaging, records, medications, vitals, home care, laboratory workflows, notifications and administration as modules in one deployable application initially.
 - Enforce authorization by both role and care relationship. Audit access to sensitive records and administrative actions; do not log clinical payloads, credentials or tokens.
+- Use `/api/v1` for the Spring Boot REST API, version its contract with OpenAPI, and return consistent request IDs and safe structured errors.
+- Use structured request-aware logs, health/readiness checks, metrics and tracing as operational needs mature. Confirm backup, restore and incident ownership before production.
 - Do not implement video transport, payment processing, medication-interaction checking or automated diagnosis without approved service providers, licensed data sources and clinical/legal review.
 - Design for intermittent mobile connectivity: make retries safe, prevent duplicate bookings and requests, and show current request status clearly.
 - Confirm hosting support for Java, JDK version, database operations, backups, restore tests, monitoring and incident ownership before selecting production topology.
 - Record approved stack, hosting and integration choices as Architecture Decision Records before implementation.
+
+For the full component diagram, frontend/backend boundaries, deployment direction, testing approach and current Maven-versus-Gradle status, see the [Production Architecture Guide](PRODUCTION_ARCHITECTURE_GUIDE.md). The guide remains provisional and does not close OQ-50 or other product decisions.
 
 **Framework references:** [Spring Boot system requirements](https://docs.spring.io/spring-boot/4.1/system-requirements.html) and [Quarkus overview](https://quarkus.io/about/). Check supported releases again when implementation begins.
 
