@@ -132,28 +132,26 @@ com.mednet
   "error": {
     "code": "VALIDATION_ERROR",
     "message": "Validation failed",
-    "details": [
-      { "field": "email", "message": "Email is required" }
-    ]
+    "details": [{ "field": "email", "message": "Email is required" }]
   }
 }
 ```
 
 ### Core API groupings
 
-| Group | Example endpoints |
-| --- | --- |
-| Auth | `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/forgot-password` |
-| Patient | `/api/v1/patients/{id}`, `/api/v1/patients/{id}/records` |
-| Provider | `/api/v1/providers`, `/api/v1/providers/{id}/availability` |
-| Appointment | `/api/v1/appointments`, `/api/v1/appointments/{id}` |
-| Message | `/api/v1/conversations/{id}/messages` |
-| Medication | `/api/v1/patients/{id}/medications` |
-| Vitals | `/api/v1/patients/{id}/vitals` |
-| Home Care | `/api/v1/home-care-requests` |
-| Lab | `/api/v1/lab-requests`, `/api/v1/lab-results/{id}` |
-| Notification | `/api/v1/notifications`, `/api/v1/notifications/{id}/read` |
-| Admin | `/api/v1/admin/dashboard`, `/api/v1/admin/providers/pending` |
+| Group        | Example endpoints                                                             |
+| ------------ | ----------------------------------------------------------------------------- |
+| Auth         | `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/forgot-password` |
+| Patient      | `/api/v1/patients/{id}`, `/api/v1/patients/{id}/records`                      |
+| Provider     | `/api/v1/providers`, `/api/v1/providers/{id}/availability`                    |
+| Appointment  | `/api/v1/appointments`, `/api/v1/appointments/{id}`                           |
+| Message      | `/api/v1/conversations/{id}/messages`                                         |
+| Medication   | `/api/v1/patients/{id}/medications`                                           |
+| Vitals       | `/api/v1/patients/{id}/vitals`                                                |
+| Home Care    | `/api/v1/home-care-requests`                                                  |
+| Lab          | `/api/v1/lab-requests`, `/api/v1/lab-results/{id}`                            |
+| Notification | `/api/v1/notifications`, `/api/v1/notifications/{id}/read`                    |
+| Admin        | `/api/v1/admin/dashboard`, `/api/v1/admin/providers/pending`                  |
 
 ---
 
