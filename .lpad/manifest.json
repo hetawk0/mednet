@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "project": {
+    "slug": "mednet",
+    "type": "unknown",
+    "name": "mednet"
+  },
+  "lpad": {
+    "apiUrl": "https://lpad.ekddigital.com",
+    "linkedAt": "2026-10-01T14:43:37.334Z"
+  },
+  "deploy": {
+    "target": "vps",
+    "framework": "Unknown",
+    "deployMode": "pm2",
+    "platformDomain": "mednet.lpad.ekddigital.com",
+    "defaultBranch": "main",
+    "services": [
+      {
+        "name": "api",
+        "type": "web",
+        "role": "api",
+        "rootDir": ".",
+        "runtime": "java",
+        "routes": ["/api/"],
+        "healthCheckPath": "/actuator/health"
+      },
+      {
+        "name": "web",
+        "type": "web",
+        "role": "frontend",
+        "rootDir": "web",
+        "dependsOn": ["api"],
+        "routes": ["/"]
+      }
+    ]
+  },
+  "assets": {
+    "publicBaseUrl": "https://assets.andgroupco.com",
+    "apiBaseUrl": "https://assets.andgroupco.com/api/v1",
+    "clientId": "mednet",
+    "projectName": "mednet",
+    "cdnPathTemplate": "/assets/{clientId}/{projectName}/{assetType}/{filename}"
+  },
+  "env": {
+    "hints": [
+      {
+        "key": "ASSETS_API_SECRET",
+        "description": "Assets API secret (sk_…) — server-only Bearer token",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "ASSETS_BASE_URL",
+        "description": "Assets API origin (e.g. https://assets.andgroupco.com)",
+        "required": true
+      },
+      {
+        "key": "ASSETS_PUBLIC_BASE_URL",
+        "description": "Public CDN origin for relative asset paths"
+      },
+      {
+        "key": "ASSETS_CLIENT_ID",
+        "description": "Assets client_id namespace (default: mednet)"
+      }
+    ]
+  },
+  "nginx": {
+    "routes": [
+      {
+        "path": "/",
+        "description": "Reverse-proxied to the application process on the VPS"
+      }
+    ]
+  }
+}
