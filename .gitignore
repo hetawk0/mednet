@@ -1,0 +1,18 @@
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# MacOS metadata
+.DS_Store
+**/.DS_Store
+
+# Local generated docs and image references
+# These are working notes / visual references, not production project source
+/docs/img-structure/
+
+# Optional local builds / caches
+/.idea/
+/.vscode/
+__pycache__/
+*.pyc
