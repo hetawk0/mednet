@@ -15,5 +15,6 @@
 # Optional local builds / caches
 /.idea/
 /.vscode/
+/target/
 __pycache__/
 *.pyc
