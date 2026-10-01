@@ -10,6 +10,7 @@
 # Local generated docs and image references
 # These are working notes / visual references, not production project source
 /docs/img-structure/
+/docs/*.docx
 
 # Optional local builds / caches
 /.idea/
