@@ -2,9 +2,21 @@ spring:
   application:
     name: mednet-api
 
+mednet:
+  admin:
+    email: ${MEDNET_ADMIN_EMAIL:}
+    password: ${MEDNET_ADMIN_PASSWORD:}
+
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:true}
+        same-site: lax
 
 management:
   endpoints:
