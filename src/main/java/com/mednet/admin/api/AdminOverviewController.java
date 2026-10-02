@@ -4,41 +4,53 @@ import java.lang.management.ManagementFactory;
 import java.time.Instant;
 import java.util.List;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.mednet.admin.app.AdminWorkflowService;
+import com.mednet.admin.data.AdminWorkflowModels.AdminCounts;
 
 @RestController
 @RequestMapping("/api/v1/admin")
 public class AdminOverviewController {
 
     private final HealthEndpoint healthEndpoint;
+    private final ObjectProvider<AdminWorkflowService> workflowService;
 
-    public AdminOverviewController(HealthEndpoint healthEndpoint) {
+    public AdminOverviewController(
+            HealthEndpoint healthEndpoint,
+            ObjectProvider<AdminWorkflowService> workflowService) {
         this.healthEndpoint = healthEndpoint;
+        this.workflowService = workflowService;
     }
 
     @GetMapping("/overview")
     public AdminOverview overview() {
         String status = healthEndpoint.health().getStatus().getCode();
         long uptimeSeconds = ManagementFactory.getRuntimeMXBean().getUptime() / 1_000;
+        AdminWorkflowService workflows = workflowService.getIfAvailable();
+        String moduleStatus = workflows == null ? "NOT_CONFIGURED" : "CONNECTED";
 
         return new AdminOverview(
                 status,
                 Instant.now(),
                 uptimeSeconds,
+                workflows == null ? null : workflows.counts(),
                 List.of(
-                        new AdminModule("providerReview", "NOT_IMPLEMENTED"),
-                        new AdminModule("accountSupport", "NOT_IMPLEMENTED"),
-                        new AdminModule("serviceRequests", "NOT_IMPLEMENTED"),
-                        new AdminModule("auditTrail", "NOT_IMPLEMENTED")));
+                        new AdminModule("providerReview", moduleStatus),
+                        new AdminModule("accountSupport", workflows == null ? "NOT_CONFIGURED" : "PARTIAL"),
+                        new AdminModule("serviceRequests", moduleStatus),
+                        new AdminModule("auditTrail", moduleStatus)));
     }
 
     public record AdminOverview(
             String apiStatus,
             Instant checkedAt,
             long uptimeSeconds,
+            AdminCounts counts,
             List<AdminModule> modules) {
     }
 

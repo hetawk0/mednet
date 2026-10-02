@@ -22,7 +22,10 @@
         "role": "api",
         "rootDir": ".",
         "runtime": "java",
-        "routes": ["/api/", "/actuator/"],
+        "routes": [
+          "/api/",
+          "/actuator/"
+        ],
         "healthCheckPath": "/actuator/health"
       },
       {
@@ -30,8 +33,12 @@
         "type": "web",
         "role": "frontend",
         "rootDir": "web",
-        "dependsOn": ["api"],
-        "routes": ["/"]
+        "dependsOn": [
+          "api"
+        ],
+        "routes": [
+          "/"
+        ]
       }
     ]
   },
@@ -62,6 +69,54 @@
       {
         "key": "ASSETS_CLIENT_ID",
         "description": "Assets client_id namespace (default: mednet)"
+      },
+      {
+        "key": "MEDNET_ADMIN_EMAIL",
+        "description": "Initial MedNet administrator email",
+        "required": true
+      },
+      {
+        "key": "MEDNET_ADMIN_PASSWORD",
+        "description": "Initial MedNet administrator password",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "SESSION_COOKIE_SECURE",
+        "description": "Set true for the HTTPS production deployment"
+      },
+      {
+        "key": "SPRING_DATASOURCE_URL",
+        "description": "PostgreSQL JDBC URL for admin workflow persistence",
+        "required": true
+      },
+      {
+        "key": "SPRING_DATASOURCE_USERNAME",
+        "description": "PostgreSQL application username",
+        "required": true
+      },
+      {
+        "key": "SPRING_DATASOURCE_PASSWORD",
+        "description": "PostgreSQL application password",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "GOOGLE_OAUTH_ENABLED",
+        "description": "Enable Google sign-in after OAuth credentials are configured"
+      },
+      {
+        "key": "GOOGLE_CLIENT_ID",
+        "description": "Google OAuth web client ID"
+      },
+      {
+        "key": "GOOGLE_CLIENT_SECRET",
+        "description": "Google OAuth web client secret",
+        "secret": true
+      },
+      {
+        "key": "GOOGLE_REDIRECT_URI",
+        "description": "Registered Google OAuth callback URL"
       }
     ]
   },

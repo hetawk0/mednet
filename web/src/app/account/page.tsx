@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { AdminPortal } from "@/components/admin-portal";
+import { UserAccountPortal } from "@/components/google-signin";
 
 export const metadata: Metadata = {
-  title: "Administration",
+  title: "Account",
   robots: { index: false, follow: false },
 };
 
 export const dynamic = "force-dynamic";
 
-export default function AdminPage() {
-  return <AdminPortal />;
+export default function AccountPage() {
+  return <UserAccountPortal />;
 }

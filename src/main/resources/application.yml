@@ -1,11 +1,17 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: mednet-api
+  jpa:
+    open-in-view: false
 
 mednet:
   admin:
     email: ${MEDNET_ADMIN_EMAIL:}
     password: ${MEDNET_ADMIN_PASSWORD:}
+  google:
+    enabled: ${GOOGLE_OAUTH_ENABLED:false}
 
 server:
   port: ${SERVER_PORT:8080}
