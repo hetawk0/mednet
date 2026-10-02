@@ -9,13 +9,13 @@ export default function VerifyPage() {
     const params = new URLSearchParams(window.location.search);
     const email = params.get("email");
     const token = params.get("token");
-    if (!email || !token) {
-      setMessage("This verification link is incomplete.");
-      return;
-    }
-    fetch(
-      `/api/v1/auth/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`,
-    )
+    const verification =
+      email && token
+        ? fetch(
+            `/api/v1/auth/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`,
+          )
+        : Promise.reject(new Error("This verification link is incomplete."));
+    verification
       .then(async (response) => {
         const body = (await response.json()) as {
           message?: string;

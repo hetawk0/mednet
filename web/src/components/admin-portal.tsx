@@ -182,7 +182,10 @@ export function AdminPortal() {
     }
   }
 
-  async function reloadTab(tab: Exclude<AdminTab, "overview">, requestedPage = 0) {
+  async function reloadTab(
+    tab: Exclude<AdminTab, "overview">,
+    requestedPage = 0,
+  ) {
     const endpoint = tab === "audit" ? "audit" : tab;
     const query = tab === "accounts" ? `?page=${requestedPage}&size=25` : "";
     const response = await fetch(`/api/v1/admin/${endpoint}${query}`, {
@@ -456,6 +459,7 @@ export function AdminPortal() {
       ) : (
         <AdminWorkspace
           activeTab={activeTab}
+          accountPage={accountPage}
           accounts={accounts}
           auditEvents={auditEvents}
           busy={busy}
@@ -482,6 +486,7 @@ export function AdminPortal() {
 
 function AdminWorkspace({
   activeTab,
+  accountPage,
   accounts,
   auditEvents,
   busy,
@@ -498,6 +503,7 @@ function AdminWorkspace({
   onRefresh,
 }: {
   activeTab: AdminTab;
+  accountPage: { number: number; totalPages: number; totalElements: number };
   accounts: PlatformAccount[];
   auditEvents: AdminAuditEvent[];
   busy: boolean;
@@ -893,7 +899,9 @@ function AdminWorkspace({
                   disabled={
                     busy || accountPage.number + 1 >= accountPage.totalPages
                   }
-                  onClick={() => void onChangeAccountPage(accountPage.number + 1)}
+                  onClick={() =>
+                    void onChangeAccountPage(accountPage.number + 1)
+                  }
                 >
                   Next page
                 </button>
