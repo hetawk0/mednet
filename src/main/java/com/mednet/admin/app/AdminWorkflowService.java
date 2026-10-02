@@ -5,6 +5,9 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -31,7 +34,7 @@ import com.mednet.admin.data.ServiceRequestRepository;
 public class AdminWorkflowService {
 
     private static final Set<String> PROVIDER_STATUSES = Set.of("PENDING", "APPROVED", "REJECTED", "SUSPENDED");
-    private static final Set<String> ACCOUNT_TYPES = Set.of("PATIENT", "PROVIDER");
+    private static final Set<String> ACCOUNT_TYPES = Set.of("PATIENT", "PROVIDER", "ADMIN", "SUPER_ADMIN");
     private static final Set<String> ACCOUNT_STATUSES = Set.of("ACTIVE", "SUSPENDED");
     private static final Set<String> REQUEST_TYPES = Set.of("APPOINTMENT", "HOME_CARE", "LABORATORY");
     private static final Set<String> REQUEST_STATUSES = Set.of("OPEN", "IN_PROGRESS", "RESOLVED", "CANCELLED");
@@ -84,8 +87,23 @@ public class AdminWorkflowService {
     }
 
     @Transactional(readOnly = true)
-    public List<PlatformAccount> accounts() {
-        return accounts.findTop100ByOrderByCreatedAtDesc().stream().map(AdminWorkflowService::toModel).toList();
+    public Page<PlatformAccount> accounts(int page, int size, String search, String status) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 100);
+        var pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        String normalizedSearch = search == null ? "" : search.trim();
+        String normalizedStatus = status == null || status.isBlank() ? null : requireStatus(status, ACCOUNT_STATUSES);
+        Page<PlatformAccountEntity> rows;
+        if (normalizedStatus == null && normalizedSearch.isBlank()) {
+            rows = accounts.findAll(pageable);
+        } else if (normalizedStatus == null) {
+            rows = accounts.findByEmailContainingIgnoreCase(normalizedSearch, pageable);
+        } else if (normalizedSearch.isBlank()) {
+            rows = accounts.findByStatus(normalizedStatus, pageable);
+        } else {
+            rows = accounts.findByEmailContainingIgnoreCaseAndStatus(normalizedSearch, normalizedStatus, pageable);
+        }
+        return rows.map(AdminWorkflowService::toModel);
     }
 
     @Transactional
@@ -108,6 +126,22 @@ public class AdminWorkflowService {
         entity.changeStatus(nextStatus);
         audit(actor, "account." + nextStatus.toLowerCase(Locale.ROOT), "account", id);
         return toModel(entity);
+    }
+
+    @Transactional
+    public PlatformAccount changeAccountType(String id, String accountType, String actor) {
+        PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
+        String nextType = requireStatus(accountType, ACCOUNT_TYPES);
+        entity.changeAccountType(nextType);
+        audit(actor, "account.role_changed", "account", id);
+        return toModel(entity);
+    }
+
+    @Transactional
+    public void deleteAccount(String id, String actor) {
+        PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
+        accounts.delete(entity);
+        audit(actor, "account.deleted", "account", id);
     }
 
     @Transactional(readOnly = true)
@@ -189,7 +223,7 @@ public class AdminWorkflowService {
     private static PlatformAccount toModel(PlatformAccountEntity entity) {
         return new PlatformAccount(
                 entity.getId(), entity.getEmail(), entity.getAccountType(), entity.getStatus(),
-                entity.getCreatedAt(), entity.getUpdatedAt());
+                entity.isEmailVerified(), entity.getCreatedAt(), entity.getUpdatedAt());
     }
 
     private static ServiceRequest toModel(ServiceRequestEntity entity) {

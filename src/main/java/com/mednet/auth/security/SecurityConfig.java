@@ -22,8 +22,13 @@ import jakarta.servlet.http.HttpServletResponse;
 import static org.springframework.security.config.http.SessionCreationPolicy.IF_REQUIRED;
 
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+
+import com.mednet.admin.data.PlatformAccountEntity;
+import com.mednet.admin.data.PlatformAccountRepository;
 
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Bean
@@ -32,27 +37,35 @@ public class SecurityConfig {
     }
 
     @Bean
-    UserDetailsService adminUserDetailsService(
+    UserDetailsService userDetailsService(
             @Value("${mednet.admin.email:}") String adminEmail,
             @Value("${mednet.admin.password:}") String adminPassword,
-            PasswordEncoder passwordEncoder) {
-        if (adminEmail.isBlank() || adminPassword.isBlank()) {
-            return username -> {
-                throw new UsernameNotFoundException("Administrator access is not configured");
-            };
-        }
-
-        String normalizedEmail = adminEmail.trim().toLowerCase(Locale.ROOT);
-        UserDetails administrator = User.withUsername(normalizedEmail)
-                .password(passwordEncoder.encode(adminPassword))
-                .roles("ADMIN")
-                .build();
+            PasswordEncoder passwordEncoder,
+            PlatformAccountRepository accounts) {
+        String normalizedAdminEmail = adminEmail.trim().toLowerCase(Locale.ROOT);
+        UserDetails administrator = normalizedAdminEmail.isBlank() || adminPassword.isBlank()
+                ? null
+                : User.withUsername(normalizedAdminEmail)
+                        .password(passwordEncoder.encode(adminPassword))
+                        .roles("SUPER_ADMIN")
+                        .build();
 
         return username -> {
-            if (normalizedEmail.equals(username.trim().toLowerCase(Locale.ROOT))) {
+            String normalizedUsername = username.trim().toLowerCase(Locale.ROOT);
+            if (administrator != null && normalizedAdminEmail.equals(normalizedUsername)) {
                 return administrator;
             }
-            throw new UsernameNotFoundException("Administrator account not found");
+            PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalizedUsername)
+                    .orElseThrow(() -> new UsernameNotFoundException("Account not found"));
+            if (account.getPasswordHash() == null) {
+                throw new UsernameNotFoundException("Password sign-in is not configured for this account");
+            }
+            return User.withUsername(account.getEmail())
+                    .password(account.getPasswordHash())
+                    .roles(account.getAccountType())
+                    .disabled("SUSPENDED".equals(account.getStatus()))
+                    .accountExpired(!account.isEmailVerified())
+                    .build();
         };
     }
 
@@ -71,9 +84,6 @@ public class SecurityConfig {
 
         AuthenticationSuccessHandler loginSuccess = (request, response, authentication) -> response
                 .setStatus(HttpServletResponse.SC_NO_CONTENT);
-        AuthenticationFailureHandler loginFailure = (request, response, exception) -> writeUnauthorized(response,
-                "Invalid administrator credentials");
-
         http
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository))
                 .authorizeHttpRequests(authorize -> authorize
@@ -81,20 +91,26 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/actuator/health/**",
                                 "/api/v1/auth/csrf",
-                                "/api/v1/auth/admin/login",
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/register",
+                                "/api/v1/auth/verify",
+                                "/api/v1/auth/resend-verification",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
                                 "/api/v1/auth/google/status",
                                 "/api/v1/auth/oauth2/**")
                         .permitAll()
                         .requestMatchers("/api/v1/admin/**", "/api/v1/auth/admin/**")
-                        .hasRole("ADMIN")
+                        .hasAnyRole("ADMIN", "SUPER_ADMIN")
                         .anyRequest()
                         .permitAll())
                 .formLogin(form -> form
-                        .loginProcessingUrl("/api/v1/auth/admin/login")
+                        .loginProcessingUrl("/api/v1/auth/login")
                         .usernameParameter("email")
                         .passwordParameter("password")
                         .successHandler(loginSuccess)
-                        .failureHandler(loginFailure))
+                        .failureHandler((request, response, exception) -> writeUnauthorized(response,
+                                "Invalid email or password")))
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")
                         .logoutSuccessHandler((request, response, authentication) -> response

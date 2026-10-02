@@ -24,6 +24,7 @@ public final class AdminWorkflowModels {
             String email,
             String accountType,
             String status,
+            boolean emailVerified,
             Instant createdAt,
             Instant updatedAt) {
     }

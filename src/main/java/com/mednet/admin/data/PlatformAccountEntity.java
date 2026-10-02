@@ -23,6 +23,24 @@ public class PlatformAccountEntity {
     @Column(name = "google_subject", unique = true, length = 255)
     private String googleSubject;
 
+    @Column(name = "password_hash", length = 100)
+    private String passwordHash;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Column(name = "verification_token_hash", length = 64)
+    private String verificationTokenHash;
+
+    @Column(name = "verification_token_expires_at")
+    private Instant verificationTokenExpiresAt;
+
+    @Column(name = "password_reset_token_hash", length = 64)
+    private String passwordResetTokenHash;
+
+    @Column(name = "password_reset_token_expires_at")
+    private Instant passwordResetTokenExpiresAt;
+
     @Column(name = "account_type", nullable = false, length = 16)
     private String accountType;
 
@@ -69,6 +87,30 @@ public class PlatformAccountEntity {
         return googleSubject;
     }
 
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public String getVerificationTokenHash() {
+        return verificationTokenHash;
+    }
+
+    public Instant getVerificationTokenExpiresAt() {
+        return verificationTokenExpiresAt;
+    }
+
+    public String getPasswordResetTokenHash() {
+        return passwordResetTokenHash;
+    }
+
+    public Instant getPasswordResetTokenExpiresAt() {
+        return passwordResetTokenExpiresAt;
+    }
+
     public String getAccountType() {
         return accountType;
     }
@@ -91,9 +133,39 @@ public class PlatformAccountEntity {
 
     public void linkGoogleSubject(String googleSubject) {
         this.googleSubject = googleSubject;
+        this.emailVerified = true;
     }
 
     public void changeAccountType(String accountType) {
         this.accountType = accountType;
+    }
+
+    public void changeEmail(String email) {
+        this.email = email;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public void setVerificationToken(String tokenHash, Instant expiresAt) {
+        this.verificationTokenHash = tokenHash;
+        this.verificationTokenExpiresAt = expiresAt;
+    }
+
+    public void verifyEmail() {
+        this.emailVerified = true;
+        this.verificationTokenHash = null;
+        this.verificationTokenExpiresAt = null;
+    }
+
+    public void setPasswordResetToken(String tokenHash, Instant expiresAt) {
+        this.passwordResetTokenHash = tokenHash;
+        this.passwordResetTokenExpiresAt = expiresAt;
+    }
+
+    public void clearPasswordResetToken() {
+        this.passwordResetTokenHash = null;
+        this.passwordResetTokenExpiresAt = null;
     }
 }

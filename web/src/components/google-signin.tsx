@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 
 type GoogleStatus = { enabled: boolean };
@@ -9,12 +9,18 @@ type CsrfResponse = { headerName: string; token: string };
 
 export function GoogleSignIn() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
     async function checkGoogleStatus() {
       try {
-        const response = await fetch("/api/v1/auth/google/status", { cache: "no-store" });
+        const response = await fetch("/api/v1/auth/google/status", {
+          cache: "no-store",
+        });
         const status = (await response.json()) as GoogleStatus;
         if (active) setEnabled(response.ok && status.enabled);
       } catch {
@@ -27,31 +33,192 @@ export function GoogleSignIn() {
     };
   }, []);
 
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+    try {
+      const csrfResponse = await fetch("/api/v1/auth/csrf", {
+        credentials: "same-origin",
+      });
+      const csrf = (await csrfResponse.json()) as CsrfResponse;
+      if (mode === "login") {
+        const response = await fetch("/api/v1/auth/login", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            [csrf.headerName]: csrf.token,
+          },
+          body: new URLSearchParams({ email, password }),
+        });
+        if (!response.ok)
+          throw new Error("Sign-in failed. Verify your email and password.");
+        const redirect = new URLSearchParams(window.location.search).get(
+          "redirect",
+        );
+        window.location.assign(
+          redirect?.startsWith("/") ? redirect : "/account",
+        );
+      } else if (mode === "register") {
+        const response = await fetch("/api/v1/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        if (!response.ok) throw new Error("We could not create that account.");
+        setMessage(
+          "Check your email for a verification link before signing in.",
+        );
+        setMode("login");
+      } else {
+        const response = await fetch("/api/v1/auth/forgot-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        if (!response.ok)
+          throw new Error("We could not start password recovery.");
+        setMessage(
+          "If the account exists, password recovery instructions have been sent.",
+        );
+      }
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Request failed. Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="admin-shell">
       <header className="admin-header">
         <Link className="admin-brand" href="/" aria-label="MedNet home">
-          <span className="admin-brand-mark" aria-hidden="true">M</span>
+          <span className="admin-brand-mark" aria-hidden="true">
+            M
+          </span>
           <span>MedNet</span>
         </Link>
         <div className="admin-header-label">
           <span className="admin-header-kicker">Secure access</span>
           <span>Sign in</span>
         </div>
-        <Link className="admin-public-link" href="/">Public site</Link>
+        <Link className="admin-public-link" href="/">
+          Public site
+        </Link>
       </header>
       <section className="admin-login-layout">
         <div className="admin-login-intro">
           <p className="admin-eyebrow">MedNet account</p>
           <h1>Sign in securely.</h1>
-          <p>Use your Google account to continue. New accounts start with patient access; provider access requires approval.</p>
+          <p>
+            Use your Google account to continue. New accounts start with patient
+            access; provider access requires approval.
+          </p>
         </div>
         <div className="admin-login-form">
+          <div
+            className="admin-auth-modes"
+            role="tablist"
+            aria-label="Account access"
+          >
+            <button
+              type="button"
+              className={
+                mode === "login"
+                  ? "admin-auth-mode admin-auth-mode-active"
+                  : "admin-auth-mode"
+              }
+              onClick={() => setMode("login")}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              className={
+                mode === "register"
+                  ? "admin-auth-mode admin-auth-mode-active"
+                  : "admin-auth-mode"
+              }
+              onClick={() => setMode("register")}
+            >
+              Create account
+            </button>
+            <button
+              type="button"
+              className={
+                mode === "forgot"
+                  ? "admin-auth-mode admin-auth-mode-active"
+                  : "admin-auth-mode"
+              }
+              onClick={() => setMode("forgot")}
+            >
+              Forgot password
+            </button>
+          </div>
+          <form className="admin-account-form" onSubmit={submit}>
+            <label htmlFor="account-email">Email address</label>
+            <input
+              id="account-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+            />
+            {mode !== "forgot" && (
+              <>
+                <label htmlFor="account-password">Password</label>
+                <input
+                  id="account-password"
+                  name="password"
+                  type="password"
+                  minLength={12}
+                  autoComplete={
+                    mode === "login" ? "current-password" : "new-password"
+                  }
+                  required
+                />
+              </>
+            )}
+            {error && (
+              <p className="admin-error" role="alert">
+                {error}
+              </p>
+            )}
+            {message && (
+              <p className="admin-form-note" role="status">
+                {message}
+              </p>
+            )}
+            <button className="admin-submit" type="submit" disabled={busy}>
+              {busy
+                ? "Working..."
+                : mode === "login"
+                  ? "Sign in"
+                  : mode === "register"
+                    ? "Create account"
+                    : "Send recovery email"}
+            </button>
+          </form>
           <span className="admin-data-label">Google account</span>
           {enabled === null ? (
-            <p className="admin-form-note" aria-live="polite">Checking sign-in availability...</p>
+            <p className="admin-form-note" aria-live="polite">
+              Checking sign-in availability...
+            </p>
           ) : enabled ? (
-            <Link className="admin-submit admin-google-button" href="/api/v1/auth/oauth2/authorization/google" prefetch={false}>
+            <Link
+              className="admin-submit admin-google-button"
+              href="/api/v1/auth/oauth2/authorization/google"
+              prefetch={false}
+            >
               Continue with Google
             </Link>
           ) : (
@@ -59,8 +226,14 @@ export function GoogleSignIn() {
               Google sign-in is not configured for this deployment yet.
             </p>
           )}
-          <p className="admin-form-note">Google verifies your email. MedNet keeps access roles and protected data on its backend.</p>
-          <p className="admin-form-note">Administrators can also sign in at <Link href="/admin">the admin area</Link>.</p>
+          <p className="admin-form-note">
+            Google verifies your email. MedNet keeps access roles and protected
+            data on its backend.
+          </p>
+          <p className="admin-form-note">
+            Administrators can also sign in at{" "}
+            <Link href="/admin">the admin area</Link>.
+          </p>
         </div>
       </section>
     </main>
@@ -69,14 +242,18 @@ export function GoogleSignIn() {
 
 export function UserAccountPortal() {
   const [session, setSession] = useState<AccountSession | null>(null);
-  const [state, setState] = useState<"loading" | "signed-out" | "signed-in">("loading");
+  const [state, setState] = useState<"loading" | "signed-out" | "signed-in">(
+    "loading",
+  );
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
     async function loadSession() {
       try {
-        const response = await fetch("/api/v1/auth/session", { cache: "no-store" });
+        const response = await fetch("/api/v1/auth/session", {
+          cache: "no-store",
+        });
         if (!active) return;
         if (!response.ok) {
           setState("signed-out");
@@ -98,7 +275,9 @@ export function UserAccountPortal() {
 
   async function signOut() {
     try {
-      const csrfResponse = await fetch("/api/v1/auth/csrf", { cache: "no-store" });
+      const csrfResponse = await fetch("/api/v1/auth/csrf", {
+        cache: "no-store",
+      });
       const csrf = (await csrfResponse.json()) as CsrfResponse;
       await fetch("/api/v1/auth/logout", {
         method: "POST",
@@ -115,7 +294,9 @@ export function UserAccountPortal() {
     <main className="admin-shell">
       <header className="admin-header">
         <Link className="admin-brand" href="/" aria-label="MedNet home">
-          <span className="admin-brand-mark" aria-hidden="true">M</span>
+          <span className="admin-brand-mark" aria-hidden="true">
+            M
+          </span>
           <span>MedNet</span>
         </Link>
         <div className="admin-header-label">
@@ -125,21 +306,38 @@ export function UserAccountPortal() {
       </header>
       <section className="admin-content">
         {state === "loading" ? (
-          <div className="admin-state" aria-live="polite">Checking your session...</div>
+          <div className="admin-state" aria-live="polite">
+            Checking your session...
+          </div>
         ) : state === "signed-out" ? (
           <div className="admin-not-configured">
             <h1>Sign in to continue</h1>
-            {error && <p className="admin-error" role="alert">{error}</p>}
-            <Link className="admin-submit admin-google-button" href="/sign-in">Go to sign in</Link>
+            {error && (
+              <p className="admin-error" role="alert">
+                {error}
+              </p>
+            )}
+            <Link className="admin-submit admin-google-button" href="/sign-in">
+              Go to sign in
+            </Link>
           </div>
         ) : (
           <>
             <p className="admin-eyebrow">Signed in</p>
             <h1>{session?.email}</h1>
             <p className="admin-account-role">Account type: {session?.role}</p>
-            <p className="admin-module-note">Patient and provider service workflows are being connected separately. No clinical information is displayed here.</p>
-            {error && <p className="admin-error" role="alert">{error}</p>}
-            <button className="admin-signout" type="button" onClick={signOut}>Sign out</button>
+            <p className="admin-module-note">
+              Patient and provider service workflows are being connected
+              separately. No clinical information is displayed here.
+            </p>
+            {error && (
+              <p className="admin-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button className="admin-signout" type="button" onClick={signOut}>
+              Sign out
+            </button>
           </>
         )}
       </section>

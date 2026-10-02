@@ -1,6 +1,7 @@
 package com.mednet.admin.api;
 
 import java.util.List;
+import org.springframework.data.domain.Page;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.core.Authentication;
@@ -55,8 +56,12 @@ public class AdminWorkflowController {
     }
 
     @GetMapping("/accounts")
-    public List<PlatformAccount> accounts() {
-        return service.accounts();
+    public Page<PlatformAccount> accounts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status) {
+        return service.accounts(page, size, search, status);
     }
 
     @PostMapping("/accounts")
@@ -68,6 +73,21 @@ public class AdminWorkflowController {
     public PlatformAccount changeAccountStatus(
             @PathVariable String id, @Valid @RequestBody StatusRequest request, Authentication actor) {
         return service.changeAccountStatus(id, request.status(), actor.getName());
+    }
+
+    @PatchMapping("/accounts/{id}/role")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PlatformAccount changeAccountRole(
+            @PathVariable String id, @Valid @RequestBody RoleRequest request, Authentication actor) {
+        return service.changeAccountType(id, request.accountType(), actor.getName());
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/accounts/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPER_ADMIN')")
+    public org.springframework.http.ResponseEntity<Void> deleteAccount(
+            @PathVariable String id, Authentication actor) {
+        service.deleteAccount(id, actor.getName());
+        return org.springframework.http.ResponseEntity.noContent().build();
     }
 
     @GetMapping("/requests")
@@ -111,5 +131,8 @@ public class AdminWorkflowController {
     }
 
     public record StatusRequest(@NotBlank String status) {
+    }
+
+    public record RoleRequest(@NotBlank String accountType) {
     }
 }

@@ -40,8 +40,7 @@ class MedNetApplicationTests {
     private static final String ADMIN_PASSWORD = UUID.randomUUID().toString();
     private static final String GOOGLE_CLIENT_ID = "test-client-" + UUID.randomUUID();
     private static final String GOOGLE_CLIENT_SECRET = UUID.randomUUID().toString();
-    private static final String GOOGLE_REDIRECT_URI =
-            "http://localhost:8080/api/v1/auth/oauth2/callback/google";
+    private static final String GOOGLE_REDIRECT_URI = "http://localhost:8080/api/v1/auth/oauth2/callback/google";
 
     @DynamicPropertySource
     static void registerAdministratorProperties(DynamicPropertyRegistry registry) {
@@ -66,12 +65,12 @@ class MedNetApplicationTests {
         assertThat(healthEndpoint.health().getStatus()).isEqualTo(Status.UP);
     }
 
-        @Test
-        void localEnvironmentValuesMayBeQuoted() {
-                assertThat(MedNetApplication.normalizeEnvironmentValue("\"client-secret\"")).isEqualTo("client-secret");
-                assertThat(MedNetApplication.normalizeEnvironmentValue("'local-password'")).isEqualTo("local-password");
-                assertThat(MedNetApplication.normalizeEnvironmentValue("plain-value")).isEqualTo("plain-value");
-        }
+    @Test
+    void localEnvironmentValuesMayBeQuoted() {
+        assertThat(MedNetApplication.normalizeEnvironmentValue("\"client-secret\"")).isEqualTo("client-secret");
+        assertThat(MedNetApplication.normalizeEnvironmentValue("'local-password'")).isEqualTo("local-password");
+        assertThat(MedNetApplication.normalizeEnvironmentValue("plain-value")).isEqualTo("plain-value");
+    }
 
     @Test
     void adminOverviewRequiresAdministratorAuthentication() throws Exception {
@@ -99,7 +98,7 @@ class MedNetApplicationTests {
 
     @Test
     void administratorCanLogInAndReadTheOperationalOverview() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/admin/login")
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
                 .with(csrf())
                 .param("email", ADMIN_EMAIL)
                 .param("password", ADMIN_PASSWORD))

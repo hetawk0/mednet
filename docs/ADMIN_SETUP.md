@@ -1,8 +1,8 @@
 # MedNet Admin Setup
 
-## Initial administrator
+## Initial SUPER_ADMIN
 
-The first admin release uses one operator-provisioned administrator account. It is not possible to register an administrator from the public website.
+The operator-provisioned `MEDNET_ADMIN_EMAIL` account is the initial `SUPER_ADMIN`. It can access the administration console, change account roles, suspend or reactivate accounts, and delete account records. Public registration can create only `PATIENT` or `PROVIDER` accounts; it can never create an administrator role.
 
 For local development, copy the root `.env.example` to `.env` and set local-only values there. Spring Boot imports that file automatically; `.env` is ignored by Git.
 
@@ -16,14 +16,18 @@ For production, set these values in the MedNet environment in LPAD:
 | `SPRING_DATASOURCE_URL`      | PostgreSQL JDBC URL, for example `jdbc:postgresql://<host>:5432/mednet` |
 | `SPRING_DATASOURCE_USERNAME` | PostgreSQL application user                                             |
 | `SPRING_DATASOURCE_PASSWORD` | PostgreSQL password; store as a secret                                  |
-| `GOOGLE_OAUTH_ENABLED` | Set `true` after Google credentials and PostgreSQL are configured |
-| `GOOGLE_CLIENT_ID` | Google OAuth web client ID; server-side only |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret; store as a secret |
-| `GOOGLE_REDIRECT_URI` | OAuth callback URI registered in Google Cloud |
+| `GOOGLE_OAUTH_ENABLED`       | Set `true` after Google credentials and PostgreSQL are configured       |
+| `GOOGLE_CLIENT_ID`           | Google OAuth web client ID; server-side only                            |
+| `GOOGLE_CLIENT_SECRET`       | Google OAuth client secret; store as a secret                           |
+| `GOOGLE_REDIRECT_URI`        | OAuth callback URI registered in Google Cloud                           |
 
 Do not put production credentials in Git, `.lpad/manifest.json`, or public frontend variables. Use a long, unique password and rotate it by changing the LPAD secret and restarting the API service. The committed `.env.example` contains placeholders only, never usable credentials.
 
 The API hashes the configured password with BCrypt at startup. It uses an HTTP-only session cookie and CSRF protection for login and logout. The admin routes return `401` until valid credentials are configured. Flyway creates the admin workflow tables when the PostgreSQL datasource is present.
+
+## Account email delivery
+
+MedNet uses the server-side EKDSend API for account verification, resend-verification, forgot-password, and password-reset messages. Configure `EKDSEND_API_URL`, `EKDSEND_API_KEY`, and `FROM_EMAIL` in LPAD or the local `.env`; keep the API key server-only. The shared sign-in page supports email/password registration and recovery alongside optional Google sign-in.
 
 ## Google sign-in
 
@@ -40,6 +44,6 @@ Only verified Google email addresses are accepted. The email matching `MEDNET_AD
 
 ## Current scope
 
-The `/admin` page is connected to the protected Spring Boot API. Provider application review, account registry status, admin-entered service-request records, and audit events are stored in PostgreSQL. Account status changes do not yet disable patient/provider sign-in, and service requests are not yet connected to patient submission or notifications. No patient clinical records are exposed.
+The `/admin` page is a protected operations console, not a login form. Authentication starts at `/sign-in`; the console requires `ADMIN` or `SUPER_ADMIN`, while role changes and account deletion require `SUPER_ADMIN`. The account registry supports pagination, email search, status filtering, verification state, role changes, suspension/reactivation, and deletion. Provider application review, service-request records, and audit events are stored in PostgreSQL. No patient clinical records are exposed.
 
 These endpoints store only non-clinical references and statuses. Provider applications and service requests are currently entered by administrators; patient/provider registration and request submission are separate, not-yet-implemented flows. See the open admin and clinical-data questions in `req.md` before extending access to protected health information.

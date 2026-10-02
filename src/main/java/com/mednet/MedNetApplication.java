@@ -31,27 +31,32 @@ public class MedNetApplication {
             };
             for (String key : serverKeys) {
                 String value = normalizeEnvironmentValue(context.getEnvironment().getProperty(key));
-                if (value != null) normalizedEnvironment.put(key, value);
+                if (value != null)
+                    normalizedEnvironment.put(key, value);
             }
             if (normalizedEnvironment.containsKey("SPRING_DATASOURCE_URL")) {
                 normalizedEnvironment.put("spring.datasource.url", normalizedEnvironment.get("SPRING_DATASOURCE_URL"));
             }
             if (normalizedEnvironment.containsKey("SPRING_DATASOURCE_USERNAME")) {
-                normalizedEnvironment.put("spring.datasource.username", normalizedEnvironment.get("SPRING_DATASOURCE_USERNAME"));
+                normalizedEnvironment.put("spring.datasource.username",
+                        normalizedEnvironment.get("SPRING_DATASOURCE_USERNAME"));
             }
             if (normalizedEnvironment.containsKey("SPRING_DATASOURCE_PASSWORD")) {
-                normalizedEnvironment.put("spring.datasource.password", normalizedEnvironment.get("SPRING_DATASOURCE_PASSWORD"));
+                normalizedEnvironment.put("spring.datasource.password",
+                        normalizedEnvironment.get("SPRING_DATASOURCE_PASSWORD"));
             }
             if (!normalizedEnvironment.isEmpty()) {
                 context.getEnvironment().getPropertySources().addFirst(
                         new MapPropertySource("mednet-server-environment", normalizedEnvironment));
             }
-            if (StringUtils.hasText(context.getEnvironment().getProperty("spring.datasource.url"))) return;
+            if (StringUtils.hasText(context.getEnvironment().getProperty("spring.datasource.url")))
+                return;
 
             Set<String> exclusions = new LinkedHashSet<>();
             String configuredExclusions = context.getEnvironment().getProperty("spring.autoconfigure.exclude", "");
             for (String exclusion : configuredExclusions.split(",")) {
-                if (StringUtils.hasText(exclusion)) exclusions.add(exclusion.trim());
+                if (StringUtils.hasText(exclusion))
+                    exclusions.add(exclusion.trim());
             }
             exclusions.add("org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration");
             exclusions.add("org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration");
@@ -63,7 +68,8 @@ public class MedNetApplication {
     }
 
     static String normalizeEnvironmentValue(String value) {
-        if (value == null || value.length() < 2) return value;
+        if (value == null || value.length() < 2)
+            return value;
         char first = value.charAt(0);
         char last = value.charAt(value.length() - 1);
         if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
