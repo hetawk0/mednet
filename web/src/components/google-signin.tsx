@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { PasswordInput } from "@/components/password-input";
 
 type GoogleStatus = { enabled: boolean };
 type AccountSession = { email: string; role: string };
@@ -9,6 +10,7 @@ type CsrfResponse = { headerName: string; token: string };
 
 export function GoogleSignIn() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -16,6 +18,47 @@ export function GoogleSignIn() {
 
   useEffect(() => {
     let active = true;
+    async function redirectExistingSession() {
+      try {
+        const response = await fetch("/api/v1/auth/session", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!active) return;
+        if (!response.ok) {
+          setSessionChecked(true);
+          return;
+        }
+        const session = (await response.json()) as AccountSession;
+        const redirect = new URLSearchParams(window.location.search).get(
+          "redirect",
+        );
+        const fallback =
+          session.role === "ADMIN" || session.role === "SUPER_ADMIN"
+            ? "/admin"
+            : "/account";
+        let destination = fallback;
+        if (
+          redirect?.startsWith("/") &&
+          !redirect.startsWith("//") &&
+          !redirect.includes("\\")
+        ) {
+          const requested = new URL(redirect, window.location.origin);
+          if (
+            requested.origin === window.location.origin &&
+            requested.pathname !== "/sign-in"
+          ) {
+            destination = `${requested.pathname}${requested.search}${requested.hash}`;
+          }
+        }
+        window.location.replace(destination);
+      } catch {
+        if (active) setSessionChecked(true);
+      }
+    }
+
+    void redirectExistingSession();
+
     async function checkGoogleStatus() {
       try {
         const response = await fetch("/api/v1/auth/google/status", {
@@ -32,6 +75,14 @@ export function GoogleSignIn() {
       active = false;
     };
   }, []);
+
+  if (!sessionChecked) {
+    return (
+      <main className="admin-shell admin-auth-checking">
+        <p role="status">Checking your session...</p>
+      </main>
+    );
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,8 +178,8 @@ export function GoogleSignIn() {
         <div className="admin-login-form">
           <div
             className="admin-auth-modes"
-            role="tablist"
-            aria-label="Account access"
+            role="group"
+            aria-label="Sign-in options"
           >
             <button
               type="button"
@@ -137,6 +188,7 @@ export function GoogleSignIn() {
                   ? "admin-auth-mode admin-auth-mode-active"
                   : "admin-auth-mode"
               }
+              aria-pressed={mode === "login"}
               onClick={() => setMode("login")}
             >
               Sign in
@@ -148,22 +200,19 @@ export function GoogleSignIn() {
                   ? "admin-auth-mode admin-auth-mode-active"
                   : "admin-auth-mode"
               }
+              aria-pressed={mode === "register"}
               onClick={() => setMode("register")}
             >
               Create account
             </button>
-            <button
-              type="button"
-              className={
-                mode === "forgot"
-                  ? "admin-auth-mode admin-auth-mode-active"
-                  : "admin-auth-mode"
-              }
-              onClick={() => setMode("forgot")}
-            >
-              Forgot password
-            </button>
           </div>
+          <button
+            className="admin-auth-recovery"
+            type="button"
+            onClick={() => setMode(mode === "forgot" ? "login" : "forgot")}
+          >
+            {mode === "forgot" ? "Back to sign in" : "Forgot password?"}
+          </button>
           <form className="admin-account-form" onSubmit={submit}>
             <label htmlFor="account-email">Email address</label>
             <input
@@ -174,19 +223,15 @@ export function GoogleSignIn() {
               required
             />
             {mode !== "forgot" && (
-              <>
-                <label htmlFor="account-password">Password</label>
-                <input
-                  id="account-password"
-                  name="password"
-                  type="password"
-                  minLength={12}
-                  autoComplete={
-                    mode === "login" ? "current-password" : "new-password"
-                  }
-                  required
-                />
-              </>
+              <PasswordInput
+                id="account-password"
+                name="password"
+                label="Password"
+                minLength={12}
+                autoComplete={
+                  mode === "login" ? "current-password" : "new-password"
+                }
+              />
             )}
             {error && (
               <p className="admin-error" role="alert">

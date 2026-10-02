@@ -227,6 +227,7 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 }
 
 .admin-shell { min-height: 100vh; background: #f5f8f3; color: #18352f; }
+.admin-auth-checking { min-height: 100vh; display: grid; place-items: center; color: var(--muted); font-size: 13px; }
 .admin-header { min-height: 76px; display: flex; align-items: center; gap: 26px; padding: 0 clamp(20px, 5vw, 72px); border-bottom: 1px solid #dce5dd; background: #fff; }
 .admin-brand { display: inline-flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; }
 .admin-brand-mark { width: 32px; height: 32px; display: grid; place-items: center; background: #153f34; color: #d8ed9e; font-family: var(--font-display), Georgia, serif; font-size: 21px; }
@@ -269,9 +270,19 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .admin-login-layout { width: min(960px, calc(100% - 48px)); min-height: calc(100vh - 76px); display: grid; grid-template-columns: 1fr minmax(280px, .72fr); align-items: center; gap: 80px; margin: 0 auto; padding: 70px 0; }
 .admin-login-intro { max-width: 500px; }
 .admin-login-form { display: grid; gap: 11px; padding: 26px; border: 1px solid #dce5dd; background: #fff; }
-.admin-auth-modes { display: flex; gap: 4px; margin: -4px 0 8px; border-bottom: 1px solid #dce5dd; }
-.admin-auth-mode { min-height: 34px; padding: 0 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #6d7e76; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
-.admin-auth-mode-active { border-bottom-color: #23624d; color: #153f34; }
+.admin-auth-modes { display: flex; gap: 4px; margin: -4px 0 8px; border-bottom: 1px solid var(--line); }
+.admin-auth-mode { min-height: 34px; padding: 0 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
+.admin-auth-mode-active { border-bottom-color: var(--green); color: var(--green-dark); }
+.admin-auth-recovery { justify-self: end; margin: -2px 0 7px; padding: 0; border: 0; background: transparent; color: var(--green); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
+.admin-auth-recovery:hover { color: var(--coral); }
+.admin-auth-mode:focus-visible, .admin-auth-recovery:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
+.admin-password-field { display: grid; gap: 9px; }
+.admin-password-input-wrap { position: relative; }
+.admin-password-input { padding-right: 48px !important; }
+.admin-password-toggle { position: absolute; top: 50%; right: 2px; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; transform: translateY(-50%); border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.admin-password-toggle:hover { color: var(--green-dark); }
+.admin-password-toggle:focus-visible { outline: 2px solid var(--coral); outline-offset: -2px; }
+.admin-password-toggle svg { width: 18px; height: 18px; }
 .admin-account-form { display: grid; gap: 9px; }
 .admin-account-form label { margin-top: 4px; color: #3d524b; font-size: 11px; font-weight: 700; }
 .admin-account-form input { width: 100%; min-height: 44px; padding: 0 11px; border: 1px solid #c8d6cc; border-radius: 0; background: #fff; color: #18352f; font: inherit; font-size: 14px; }

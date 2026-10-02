@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
+import { PasswordInput } from "@/components/password-input";
 
 export default function ResetPage() {
   const [busy, setBusy] = useState(false);
@@ -54,14 +55,12 @@ export default function ResetPage() {
           <p>Use at least 12 characters and keep it unique to MedNet.</p>
         </div>
         <form className="admin-login-form" onSubmit={submit}>
-          <label htmlFor="reset-password">New password</label>
-          <input
+          <PasswordInput
             id="reset-password"
             name="password"
-            type="password"
+            label="New password"
             minLength={12}
             autoComplete="new-password"
-            required
           />
           {error && (
             <p className="admin-error" role="alert">
