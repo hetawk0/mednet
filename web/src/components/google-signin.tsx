@@ -120,8 +120,8 @@ export function GoogleSignIn() {
           <p className="admin-eyebrow">MedNet account</p>
           <h1>Sign in securely.</h1>
           <p>
-            Use your Google account to continue. New accounts start with patient
-            access; provider access requires approval.
+            Use your email and password or continue with Google. New accounts
+            start with patient access; provider access requires approval.
           </p>
         </div>
         <div className="admin-login-form">
@@ -208,7 +208,7 @@ export function GoogleSignIn() {
                     : "Send recovery email"}
             </button>
           </form>
-          <span className="admin-data-label">Google account</span>
+          <span className="admin-data-label">Other sign-in options</span>
           {enabled === null ? (
             <p className="admin-form-note" aria-live="polite">
               Checking sign-in availability...

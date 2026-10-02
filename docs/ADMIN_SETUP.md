@@ -16,7 +16,7 @@ For production, set these values in the MedNet environment in LPAD:
 | `SPRING_DATASOURCE_URL`      | PostgreSQL JDBC URL, for example `jdbc:postgresql://<host>:5432/mednet` |
 | `SPRING_DATASOURCE_USERNAME` | PostgreSQL application user                                             |
 | `SPRING_DATASOURCE_PASSWORD` | PostgreSQL password; store as a secret                                  |
-| `GOOGLE_OAUTH_ENABLED`       | Set `true` after Google credentials and PostgreSQL are configured       |
+| `GOOGLE_OAUTH_ENABLED`       | Legacy compatibility flag; credentials automatically enable Google     |
 | `GOOGLE_CLIENT_ID`           | Google OAuth web client ID; server-side only                            |
 | `GOOGLE_CLIENT_SECRET`       | Google OAuth client secret; store as a secret                           |
 | `GOOGLE_REDIRECT_URI`        | OAuth callback URI registered in Google Cloud                           |
@@ -38,7 +38,7 @@ Create a Google OAuth client with application type **Web application**. Add thes
 - Local: `http://localhost:8080/api/v1/auth/oauth2/callback/google`
 - Production: `https://mednet.lpad.ekddigital.com/api/v1/auth/oauth2/callback/google`
 
-Set `GOOGLE_OAUTH_ENABLED=true`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the environment-specific `GOOGLE_REDIRECT_URI` in `.env` locally or LPAD for production. The Google client secret stays on the Spring server; never prefix it with `NEXT_PUBLIC_` or expose it to the web client.
+Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the environment-specific `GOOGLE_REDIRECT_URI` in `.env` locally or LPAD for production. Google is automatically enabled when the client credentials are present. The Google client secret stays on the Spring server; never prefix it with `NEXT_PUBLIC_` or expose it to the web client.
 
 Only verified Google email addresses are accepted. The email matching `MEDNET_ADMIN_EMAIL` receives the administrator role; other new Google accounts default to patient access. A provider role is assigned only when an administrator has approved an application for that email. Google login also requires the PostgreSQL datasource because account identity is persisted there.
 
