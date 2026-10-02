@@ -41,6 +41,12 @@ public class PlatformAccountEntity {
     @Column(name = "password_reset_token_expires_at")
     private Instant passwordResetTokenExpiresAt;
 
+    @Column(name = "password_reset_verified", nullable = false)
+    private boolean passwordResetVerified;
+
+    @Column(name = "password_reset_attempts", nullable = false)
+    private int passwordResetAttempts;
+
     @Column(name = "account_type", nullable = false, length = 16)
     private String accountType;
 
@@ -159,13 +165,32 @@ public class PlatformAccountEntity {
         this.verificationTokenExpiresAt = null;
     }
 
-    public void setPasswordResetToken(String tokenHash, Instant expiresAt) {
+    public void setPasswordResetCode(String tokenHash, Instant expiresAt) {
         this.passwordResetTokenHash = tokenHash;
         this.passwordResetTokenExpiresAt = expiresAt;
+        this.passwordResetVerified = false;
+        this.passwordResetAttempts = 0;
+    }
+
+    public int recordPasswordResetAttempt() {
+        return ++this.passwordResetAttempts;
+    }
+
+    public void setPasswordResetTicket(String tokenHash, Instant expiresAt) {
+        this.passwordResetTokenHash = tokenHash;
+        this.passwordResetTokenExpiresAt = expiresAt;
+        this.passwordResetVerified = true;
+        this.passwordResetAttempts = 0;
     }
 
     public void clearPasswordResetToken() {
         this.passwordResetTokenHash = null;
         this.passwordResetTokenExpiresAt = null;
+        this.passwordResetVerified = false;
+        this.passwordResetAttempts = 0;
+    }
+
+    public boolean isPasswordResetVerified() {
+        return passwordResetVerified;
     }
 }

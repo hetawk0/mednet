@@ -142,7 +142,7 @@ com.mednet
 
 | Group        | Example endpoints                                                             |
 | ------------ | ----------------------------------------------------------------------------- |
-| Auth         | `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/forgot-password` |
+| Auth         | `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password/verify`, `/api/v1/auth/reset-password` |
 | Patient      | `/api/v1/patients/{id}`, `/api/v1/patients/{id}/records`                      |
 | Provider     | `/api/v1/providers`, `/api/v1/providers/{id}/availability`                    |
 | Appointment  | `/api/v1/appointments`, `/api/v1/appointments/{id}`                           |

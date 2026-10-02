@@ -1,6 +1,9 @@
 package com.mednet;
 
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,12 +13,17 @@ import org.springframework.boot.health.contributor.Status;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import tools.jackson.databind.ObjectMapper;
+import com.mednet.admin.data.PlatformAccountEntity;
+import com.mednet.admin.data.PlatformAccountRepository;
+import com.mednet.auth.email.EkdSendEmailService;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -26,6 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 
 @SpringBootTest(properties = {
         "mednet.google.enabled=true",
@@ -59,6 +69,15 @@ class MedNetApplicationTests {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private PlatformAccountRepository accounts;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @MockitoBean
+    private EkdSendEmailService emailService;
 
     @Test
     void healthEndpointReportsApplicationUp() {
@@ -94,6 +113,114 @@ class MedNetApplicationTests {
         assertThat(result.getResponse().getRedirectedUrl())
                 .startsWith("https://accounts.google.com/o/oauth2/v2/auth?")
                 .contains("redirect_uri=" + GOOGLE_REDIRECT_URI);
+    }
+
+    @Test
+    void passwordResetRequiresVerifiedEmailCodeAndConsumesTicket() throws Exception {
+        String resetEmail = "reset-" + UUID.randomUUID() + "@mednet.test";
+        String previousPassword = "PreviousSecurePassword123!";
+        PlatformAccountEntity account = new PlatformAccountEntity(UUID.randomUUID().toString(), resetEmail, "PATIENT");
+        account.setPasswordHash(passwordEncoder.encode(previousPassword));
+        account.verifyEmail();
+        accounts.save(account);
+
+        AtomicReference<String> emailText = new AtomicReference<>();
+        doAnswer(invocation -> {
+            emailText.set(invocation.getArgument(3));
+            return true;
+        }).when(emailService).send(anyString(), anyString(), anyString(), anyString());
+
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + resetEmail + "\"}"))
+                .andExpect(status().isAccepted());
+
+        Matcher codeMatcher = Pattern.compile("reset code is: (\\d{6})").matcher(emailText.get());
+        assertThat(codeMatcher.find()).isTrue();
+        String oneTimeCode = codeMatcher.group(1);
+        assertThat(emailText.get()).contains("/reset?email=").doesNotContain("token=");
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + resetEmail + "\",\"token\":\"" + oneTimeCode
+                        + "\",\"password\":\"NewSecurePassword123!\"}"))
+                .andExpect(status().isBadRequest());
+
+        MvcResult verifyResult = mockMvc.perform(post("/api/v1/auth/reset-password/verify")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + resetEmail + "\",\"code\":\"" + oneTimeCode + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String resetTicket = objectMapper.readTree(verifyResult.getResponse().getContentAsString())
+                .get("token").asText();
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + resetEmail + "\",\"token\":\"" + oneTimeCode
+                        + "\",\"password\":\"NewSecurePassword123!\"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + resetEmail + "\",\"token\":\"" + resetTicket
+                        + "\",\"password\":\"NewSecurePassword123!\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + resetEmail + "\",\"token\":\"" + resetTicket
+                        + "\",\"password\":\"AnotherSecurePassword123!\"}"))
+                .andExpect(status().isBadRequest());
+
+        PlatformAccountEntity updatedAccount = accounts.findFirstByEmailIgnoreCase(resetEmail).orElseThrow();
+        assertThat(passwordEncoder.matches("NewSecurePassword123!", updatedAccount.getPasswordHash())).isTrue();
+        assertThat(passwordEncoder.matches(previousPassword, updatedAccount.getPasswordHash())).isFalse();
+    }
+
+    @Test
+    void passwordResetCodeIsInvalidatedAfterFiveFailedAttempts() throws Exception {
+        String resetEmail = "locked-reset-" + UUID.randomUUID() + "@mednet.test";
+        PlatformAccountEntity account = new PlatformAccountEntity(UUID.randomUUID().toString(), resetEmail, "PATIENT");
+        account.verifyEmail();
+        accounts.save(account);
+
+        AtomicReference<String> emailText = new AtomicReference<>();
+        doAnswer(invocation -> {
+            emailText.set(invocation.getArgument(3));
+            return true;
+        }).when(emailService).send(anyString(), anyString(), anyString(), anyString());
+
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + resetEmail + "\"}"))
+                .andExpect(status().isAccepted());
+
+        Matcher codeMatcher = Pattern.compile("reset code is: (\\d{6})").matcher(emailText.get());
+        assertThat(codeMatcher.find()).isTrue();
+        String issuedCode = codeMatcher.group(1);
+        String invalidCode = "000000".equals(issuedCode) ? "000001" : "000000";
+        String invalidRequest = "{\"email\":\"" + resetEmail + "\",\"code\":\"" + invalidCode + "\"}";
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            mockMvc.perform(post("/api/v1/auth/reset-password/verify")
+                    .with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(invalidRequest))
+                    .andExpect(status().isBadRequest());
+        }
+
+        mockMvc.perform(post("/api/v1/auth/reset-password/verify")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + resetEmail + "\",\"code\":\"" + issuedCode + "\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

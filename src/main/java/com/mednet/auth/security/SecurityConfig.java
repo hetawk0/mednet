@@ -7,6 +7,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -17,6 +18,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.HttpServletResponse;
 import static org.springframework.security.config.http.SessionCreationPolicy.IF_REQUIRED;
@@ -30,6 +33,8 @@ import com.mednet.admin.data.PlatformAccountRepository;
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -96,6 +101,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/verify",
                                 "/api/v1/auth/resend-verification",
                                 "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password/verify",
                                 "/api/v1/auth/reset-password",
                                 "/api/v1/auth/google/status",
                                 "/api/v1/auth/oauth2/**")
@@ -133,7 +139,21 @@ public class SecurityConfig {
                                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
                         response.sendRedirect(isAdmin ? "/admin" : "/account");
                     })
-                    .failureHandler((request, response, exception) -> response.sendRedirect("/sign-in?error=google")));
+                    .failureHandler((request, response, exception) -> {
+                        if (exception instanceof OAuth2AuthenticationException oauthException) {
+                            String errorCode = oauthException.getError().getErrorCode();
+                            if ("mednet_authentication_error".equals(errorCode)) {
+                                log.warn("Google sign-in rejected by MedNet account policy: {}",
+                                        oauthException.getError().getDescription());
+                            } else {
+                                log.error("Google OAuth flow failed with error code {}", errorCode, exception);
+                            }
+                        } else {
+                            log.error("Google OAuth flow failed with {}",
+                                    exception.getClass().getSimpleName(), exception);
+                        }
+                        response.sendRedirect("/sign-in?error=google");
+                    }));
         }
 
         return http.build();

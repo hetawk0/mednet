@@ -16,7 +16,7 @@ For production, set these values in the MedNet environment in LPAD:
 | `SPRING_DATASOURCE_URL`      | PostgreSQL JDBC URL, for example `jdbc:postgresql://<host>:5432/mednet` |
 | `SPRING_DATASOURCE_USERNAME` | PostgreSQL application user                                             |
 | `SPRING_DATASOURCE_PASSWORD` | PostgreSQL password; store as a secret                                  |
-| `GOOGLE_OAUTH_ENABLED`       | Legacy compatibility flag; credentials automatically enable Google     |
+| `GOOGLE_OAUTH_ENABLED`       | Legacy compatibility flag; credentials automatically enable Google      |
 | `GOOGLE_CLIENT_ID`           | Google OAuth web client ID; server-side only                            |
 | `GOOGLE_CLIENT_SECRET`       | Google OAuth client secret; store as a secret                           |
 | `GOOGLE_REDIRECT_URI`        | OAuth callback URI registered in Google Cloud                           |
@@ -27,7 +27,7 @@ The API hashes the configured password with BCrypt at startup. It uses an HTTP-o
 
 ## Account email delivery
 
-MedNet uses the server-side EKDSend API for account verification, resend-verification, forgot-password, and password-reset messages. Configure `EKDSEND_API_URL`, `EKDSEND_API_KEY`, and `FROM_EMAIL` in LPAD or the local `.env`; keep the API key server-only. The shared sign-in page supports email/password registration and recovery alongside optional Google sign-in.
+MedNet uses the server-side EKDSend API for account verification, resend-verification, forgot-password, and password-reset messages. Configure `EKDSEND_API_URL`, `EKDSEND_API_KEY`, and `FROM_EMAIL` in LPAD or the local `.env`; keep the API key server-only. Password recovery sends a six-digit code that expires after 10 minutes; five invalid attempts invalidate it. The password form is unlocked only after server verification, and the resulting reset ticket is single-use.
 
 ## Google sign-in
 
@@ -41,6 +41,8 @@ Create a Google OAuth client with application type **Web application**. Add thes
 Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the environment-specific `GOOGLE_REDIRECT_URI` in `.env` locally or LPAD for production. Google is automatically enabled when the client credentials are present. The Google client secret stays on the Spring server; never prefix it with `NEXT_PUBLIC_` or expose it to the web client.
 
 Only verified Google email addresses are accepted. The email matching `MEDNET_ADMIN_EMAIL` receives the administrator role; other new Google accounts default to patient access. A provider role is assigned only when an administrator has approved an application for that email. Google login also requires the PostgreSQL datasource because account identity is persisted there.
+
+If Google returns to `/sign-in?error=google`, the page shows a generic recovery message while the API logs a provider error code or a MedNet account-policy rejection. Confirm the registered redirect URI above and inspect the API logs; never include client secrets or tokens in support reports.
 
 ## Current scope
 

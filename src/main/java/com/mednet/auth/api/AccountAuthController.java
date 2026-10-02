@@ -28,7 +28,9 @@ import com.mednet.auth.email.EkdSendEmailService;
 public class AccountAuthController {
 
     private static final Duration VERIFICATION_LIFETIME = Duration.ofHours(24);
-    private static final Duration RESET_LIFETIME = Duration.ofMinutes(30);
+    private static final Duration RESET_CODE_LIFETIME = Duration.ofMinutes(10);
+    private static final Duration RESET_TICKET_LIFETIME = Duration.ofMinutes(10);
+    private static final int MAX_RESET_CODE_ATTEMPTS = 5;
     private final PlatformAccountRepository accounts;
     private final PasswordEncoder passwordEncoder;
     private final AuthTokenService tokens;
@@ -98,15 +100,56 @@ public class AccountAuthController {
     public ResponseEntity<MessageResponse> forgotPassword(@RequestBody EmailRequest request) {
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(request.email())).orElse(null);
         if (account != null && account.isEmailVerified()) {
-            IssuedToken token = tokens.issue(RESET_LIFETIME);
-            account.setPasswordResetToken(token.hash(), token.expiresAt());
+            IssuedToken code = tokens.issueNumericCode(RESET_CODE_LIFETIME);
+            account.setPasswordResetCode(
+                    tokens.hash("password-reset-otp:" + code.raw()), code.expiresAt());
             accounts.save(account);
-            String link = publicUrl + "/reset?email=" + encode(account.getEmail()) + "&token=" + encode(token.raw());
-            email.send(account.getEmail(), "Reset your MedNet password",
-                    "<p>Reset your password:</p><p><a href=\"" + link + "\">Reset password</a></p>",
-                    "Reset your MedNet password: " + link);
+            String link = publicUrl + "/reset?email=" + encode(account.getEmail());
+            boolean sent = email.send(account.getEmail(), "Your MedNet password reset code",
+                    "<p>Your password reset code is <strong>" + code.raw()
+                            + "</strong>.</p><p>It expires in 10 minutes.</p><p><a href=\"" + link
+                            + "\">Continue password reset</a></p>",
+                    "Your MedNet password reset code is: " + code.raw()
+                            + "\nIt expires in 10 minutes. Continue at: " + link);
+            if (!sent) {
+                account.clearPasswordResetToken();
+                accounts.save(account);
+            }
         }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(genericResponse());
+    }
+
+    @PostMapping("/reset-password/verify")
+    @Transactional
+    public ResponseEntity<ResetVerificationResponse> verifyPasswordResetCode(
+            @RequestBody ResetCodeRequest request) {
+        PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(request.email())).orElse(null);
+        if (account == null || account.isPasswordResetVerified()) {
+            return invalidResetCode();
+        }
+
+        if (account.getPasswordResetTokenHash() == null
+                || account.getPasswordResetTokenExpiresAt() == null
+                || account.getPasswordResetTokenExpiresAt().isBefore(Instant.now())) {
+            account.clearPasswordResetToken();
+            accounts.save(account);
+            return invalidResetCode();
+        }
+
+        String code = request.code() == null ? "" : request.code().trim();
+        if (!account.getPasswordResetTokenHash().equals(tokens.hash("password-reset-otp:" + code))) {
+            if (account.recordPasswordResetAttempt() >= MAX_RESET_CODE_ATTEMPTS) {
+                account.clearPasswordResetToken();
+            }
+            accounts.save(account);
+            return invalidResetCode();
+        }
+
+        IssuedToken ticket = tokens.issue(RESET_TICKET_LIFETIME);
+        account.setPasswordResetTicket(
+                tokens.hash("password-reset-ticket:" + ticket.raw()), ticket.expiresAt());
+        accounts.save(account);
+        return ResponseEntity.ok(new ResetVerificationResponse(ticket.raw(), "Code verified."));
     }
 
     @PostMapping("/reset-password")
@@ -115,8 +158,11 @@ public class AccountAuthController {
         validatePassword(request.password());
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(request.email())).orElseThrow(
                 () -> new AuthRequestException("Reset link is invalid or expired"));
-        if (account.getPasswordResetTokenHash() == null
-                || !account.getPasswordResetTokenHash().equals(tokens.hash(request.token()))
+        String ticket = request.token() == null ? "" : request.token();
+        if (!account.isPasswordResetVerified()
+                || account.getPasswordResetTokenHash() == null
+                || !account.getPasswordResetTokenHash()
+                        .equals(tokens.hash("password-reset-ticket:" + ticket))
                 || account.getPasswordResetTokenExpiresAt() == null
                 || account.getPasswordResetTokenExpiresAt().isBefore(Instant.now())) {
             throw new AuthRequestException("Reset link is invalid or expired");
@@ -160,10 +206,21 @@ public class AccountAuthController {
         return new MessageResponse("If the account can receive this message, instructions have been sent.");
     }
 
+    private static ResponseEntity<ResetVerificationResponse> invalidResetCode() {
+        return ResponseEntity.badRequest()
+                .body(new ResetVerificationResponse(null, "The code is invalid or expired. Request a new code."));
+    }
+
     public record CredentialsRequest(String email, String password, String accountType) {
     }
 
     public record EmailRequest(String email) {
+    }
+
+    public record ResetCodeRequest(String email, String code) {
+    }
+
+    public record ResetVerificationResponse(String token, String message) {
     }
 
     public record ResetPasswordRequest(String email, String token, String password) {

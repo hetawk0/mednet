@@ -8,7 +8,7 @@ type GoogleStatus = { enabled: boolean };
 type AccountSession = { email: string; role: string };
 type CsrfResponse = { headerName: string; token: string };
 
-export function GoogleSignIn() {
+export function GoogleSignIn({ googleError }: { googleError: boolean }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
@@ -118,7 +118,11 @@ export function GoogleSignIn() {
       } else if (mode === "register") {
         const response = await fetch("/api/v1/auth/register", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            [csrf.headerName]: csrf.token,
+          },
           body: JSON.stringify({ email, password }),
         });
         if (!response.ok) throw new Error("We could not create that account.");
@@ -129,7 +133,11 @@ export function GoogleSignIn() {
       } else {
         const response = await fetch("/api/v1/auth/forgot-password", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            [csrf.headerName]: csrf.token,
+          },
           body: JSON.stringify({ email }),
         });
         if (!response.ok)
@@ -176,6 +184,12 @@ export function GoogleSignIn() {
           </p>
         </div>
         <div className="admin-login-form">
+          {googleError && (
+            <p className="admin-error" role="alert">
+              Google sign-in could not be completed. Try again or use your email
+              and password.
+            </p>
+          )}
           <div
             className="admin-auth-modes"
             role="group"
@@ -274,10 +288,6 @@ export function GoogleSignIn() {
           <p className="admin-form-note">
             Google verifies your email. MedNet keeps access roles and protected
             data on its backend.
-          </p>
-          <p className="admin-form-note">
-            Administrators can also sign in at{" "}
-            <Link href="/admin">the admin area</Link>.
           </p>
         </div>
       </section>

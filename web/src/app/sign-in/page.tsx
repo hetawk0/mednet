@@ -8,6 +8,12 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function SignInPage() {
-  return <GoogleSignIn />;
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const googleError = params.error === "google";
+  return <GoogleSignIn googleError={googleError} />;
 }

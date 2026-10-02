@@ -868,7 +868,7 @@ This is a working design direction for the backend, not a client-approved contra
 
 | Area          | Example endpoint shape                                                                                   |
 | ------------- | -------------------------------------------------------------------------------------------------------- |
-| Auth          | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/forgot-password`             |
+| Auth          | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password/verify`, `POST /api/v1/auth/reset-password` |
 | Patients      | `GET /api/v1/patients/{id}`, `PATCH /api/v1/patients/{id}/profile`                                       |
 | Providers     | `GET /api/v1/providers`, `POST /api/v1/providers/applications`, `PATCH /api/v1/providers/{id}/approval`  |
 | Appointments  | `POST /api/v1/appointments`, `GET /api/v1/patients/{id}/appointments`, `PATCH /api/v1/appointments/{id}` |
