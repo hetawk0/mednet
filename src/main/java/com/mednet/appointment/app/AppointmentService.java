@@ -290,6 +290,7 @@ public class AppointmentService {
                         .orElseThrow(AppointmentService::notFound);
         return new AppointmentDetails(
                 appointment.getId(),
+                patient.getId(),
                 appointment.getStatus(),
                 patientProfile.getFullName(),
                 provider.getDisplayName(),
@@ -320,6 +321,7 @@ public class AppointmentService {
 
     public record AppointmentDetails(
             String id,
+            String patientAccountId,
             String status,
             String patientName,
             String providerName,

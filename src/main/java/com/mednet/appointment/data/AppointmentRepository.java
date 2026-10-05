@@ -1,6 +1,7 @@
 package com.mednet.appointment.data;
 
 import java.util.Optional;
+import java.util.Collection;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,4 +23,8 @@ public interface AppointmentRepository extends JpaRepository<AppointmentEntity, 
 
     Page<AppointmentEntity> findByProviderApplicationIdOrderByCreatedAtDesc(
             String providerApplicationId, Pageable pageable);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<AppointmentEntity> findFirstByPatientAccountIdAndProviderApplicationIdAndStatusInOrderByCreatedAtDesc(
+            String patientAccountId, String providerApplicationId, Collection<String> statuses);
 }

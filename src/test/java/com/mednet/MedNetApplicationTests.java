@@ -32,7 +32,12 @@ import com.mednet.patient.data.PatientProfileRepository;
 import com.mednet.patient.data.PatientProfileEntity;
 import com.mednet.provider.data.ProviderApplicationEntity;
 import com.mednet.provider.data.ProviderApplicationRepository;
+import com.mednet.provider.data.ProviderAvailabilitySlotEntity;
+import com.mednet.provider.data.ProviderAvailabilitySlotRepository;
 import com.mednet.appointment.data.AppointmentRepository;
+import com.mednet.appointment.data.AppointmentEntity;
+import com.mednet.record.data.ClinicalRecordRepository;
+import com.mednet.record.data.PatientProviderRecordConsentRepository;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -97,6 +102,15 @@ class MedNetApplicationTests {
 
     @Autowired
     private AppointmentRepository appointments;
+
+    @Autowired
+    private ProviderAvailabilitySlotRepository availabilitySlots;
+
+    @Autowired
+    private ClinicalRecordRepository clinicalRecords;
+
+    @Autowired
+    private PatientProviderRecordConsentRepository recordConsents;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -408,7 +422,8 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api/v1/appointments/{id}", appointmentId)
                 .with(user(providerEmail).roles("PROVIDER")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.patientName").value("Appointment Patient"));
+                .andExpect(jsonPath("$.patientName").value("Appointment Patient"))
+                .andExpect(jsonPath("$.patientAccountId").value(patientAccount.getId()));
 
         mockMvc.perform(patch("/api/v1/appointments/{id}", appointmentId)
                 .with(user(patientEmail).roles("PATIENT"))
@@ -452,6 +467,137 @@ class MedNetApplicationTests {
                 .andExpect(jsonPath("$.totalElements").value(2));
 
         assertThat(appointments.findById(appointmentId).orElseThrow().getStatus()).isEqualTo("CANCELLED");
+    }
+
+    @Test
+    void medicalRecordsRequireCareRelationshipAndRevocablePatientConsent() throws Exception {
+        String patientEmail = "records-patient-" + UUID.randomUUID() + "@mednet.test";
+        String providerEmail = "records-provider-" + UUID.randomUUID() + "@mednet.test";
+        PlatformAccountEntity patient = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), patientEmail, "PATIENT");
+        patient.verifyEmail();
+        accounts.save(patient);
+        PlatformAccountEntity providerAccount = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), providerEmail, "PROVIDER");
+        providerAccount.verifyEmail();
+        accounts.save(providerAccount);
+
+        ProviderApplicationEntity provider = new ProviderApplicationEntity(
+                UUID.randomUUID().toString(), "Records Provider", providerEmail, "Family Medicine", "LIC-REC-01");
+        provider.review("APPROVED", ADMIN_EMAIL);
+        providerApplications.save(provider);
+        String unrelatedProviderEmail = "unrelated-provider-" + UUID.randomUUID() + "@mednet.test";
+        PlatformAccountEntity unrelatedProviderAccount = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), unrelatedProviderEmail, "PROVIDER");
+        unrelatedProviderAccount.verifyEmail();
+        accounts.save(unrelatedProviderAccount);
+        ProviderApplicationEntity unrelatedProvider = new ProviderApplicationEntity(
+                UUID.randomUUID().toString(),
+                "Unrelated Provider",
+                unrelatedProviderEmail,
+                "Pediatrics",
+                "LIC-REC-02");
+        unrelatedProvider.review("APPROVED", ADMIN_EMAIL);
+        providerApplications.save(unrelatedProvider);
+        ProviderAvailabilitySlotEntity slot = availabilitySlots.save(new ProviderAvailabilitySlotEntity(
+                UUID.randomUUID().toString(),
+                provider.getId(),
+                Instant.now().plusSeconds(3600),
+                Instant.now().plusSeconds(5400)));
+        AppointmentEntity appointment = new AppointmentEntity(
+                UUID.randomUUID().toString(), patient.getId(), provider.getId(), slot.getId());
+        appointment.confirm();
+        appointments.save(appointment);
+
+        mockMvc.perform(get("/api/v1/patients/{patientId}/records", patient.getId())
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/v1/patients/me/record-consents")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"providerId\":\"" + provider.getId() + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("GRANTED"))
+                .andExpect(jsonPath("$.providerName").value("Records Provider"));
+
+        mockMvc.perform(post("/api/v1/patients/me/record-consents")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"providerId\":\"" + unrelatedProvider.getId() + "\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/patients/{patientId}/records", patient.getId())
+                .with(user(unrelatedProviderEmail).roles("PROVIDER")))
+                .andExpect(status().isForbidden());
+
+        MvcResult created = mockMvc.perform(post("/api/v1/patients/{patientId}/records", patient.getId())
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "category":"DIAGNOSIS",
+                          "title":"Initial diagnosis",
+                          "clinicalCode":"TEST-CODE",
+                          "summary":"Clinical details are private record content.",
+                          "effectiveAt":"%s"
+                        }
+                        """.formatted(Instant.now().minusSeconds(60))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.category").value("DIAGNOSIS"))
+                .andExpect(jsonPath("$.authorName").value("Records Provider"))
+                .andReturn();
+        String recordId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("id").asText();
+
+        mockMvc.perform(get("/api/v1/patients/me/records")
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].summary").value("Clinical details are private record content."));
+
+        mockMvc.perform(post("/api/v1/patients/{patientId}/records", patient.getId())
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "category":"DIAGNOSIS",
+                          "title":"Corrected diagnosis",
+                          "summary":"Correction recorded without changing the original entry.",
+                          "effectiveAt":"%s",
+                          "amendsRecordId":"%s"
+                        }
+                        """.formatted(Instant.now().minusSeconds(30), recordId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.amendsRecordId").value(recordId));
+
+        mockMvc.perform(get("/api/v1/patients/{patientId}/records", patient.getId())
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/admin/accounts/{id}", patient.getId())
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf()))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/patients/me/record-consents/{providerId}", provider.getId())
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REVOKED"));
+
+        mockMvc.perform(get("/api/v1/patients/{patientId}/records", patient.getId())
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isForbidden());
+        assertThat(clinicalRecords.count()).isEqualTo(2);
+        assertThat(recordConsents.count()).isEqualTo(1);
     }
 
     @Test

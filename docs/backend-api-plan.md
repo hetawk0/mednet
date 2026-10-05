@@ -147,7 +147,7 @@ The current API preserves its established success response bodies for frontend c
 | Group        | Example endpoints                                                             |
 | ------------ | ----------------------------------------------------------------------------- |
 | Auth         | `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password/verify`, `/api/v1/auth/reset-password` |
-| Patient      | `/api/v1/patients/me/profile` (current implementation), `/api/v1/patients/{id}/records` (requires approved relationship policy) |
+| Patient      | `/api/v1/patients/me/profile`, `/api/v1/patients/me/records`, `/api/v1/patients/{patientAccountId}/records`, `/api/v1/patients/me/record-consents` |
 | Provider     | `/api/v1/providers` (approved directory), `/api/v1/providers/applications`, `/api/v1/providers/me/application`, `/api/v1/providers/me/availability`, `/api/v1/providers/{id}/availability` |
 | Appointment  | `/api/v1/appointments`, `/api/v1/appointments/{id}` (patient requests remain pending until provider confirmation) |
 | Message      | `/api/v1/conversations/{id}/messages`                                         |
@@ -162,6 +162,16 @@ Availability is represented by explicit future instants (ISO-8601 timestamps), n
 confirmed appointment reserves its slot. Rescheduling requires the other participant's acceptance; cancellation is
 allowed before the slot starts. The current contract intentionally has no attendance-mode, payment, cancellation-fee,
 or no-show fields while their product decisions remain open.
+
+### Medical records (current implementation)
+
+- Patients can list their own clinical entries at `GET /api/v1/patients/me/records`.
+- Providers can list and add entries at `/api/v1/patients/{patientAccountId}/records`. Access requires an active approved provider account, a confirmed/completed appointment relationship (including an in-progress reschedule), and active, explicit consent from that patient. Appointment responses include the participant's opaque patient account ID for this purpose.
+- Patients grant consent with `POST /api/v1/patients/me/record-consents` (`providerId`), list grants with `GET`, and revoke immediately with `DELETE /api/v1/patients/me/record-consents/{providerId}`. Grants are provider-specific and remain active until revoked; access is still denied when the care relationship is no longer confirmed/completed.
+- The supported categories are encounter summaries, diagnoses, prescriptions, allergies, medical history, and document references. Entries show their provider author and effective/recorded timestamps. Corrections are additional entries linked with `amendsRecordId`; there is no update or delete endpoint.
+- Record reads and writes, and consent grants/revocations, create audit metadata without storing clinical summaries in the audit trail. Administrators cannot access clinical payloads through admin APIs. Account role changes/deletion are blocked when an account is linked to clinical records or patient consent.
+- `DOCUMENT` currently represents a provider-authored document reference/summary only. Binary upload/download and patient-supplied historical files are not enabled: the deployment has no configured private object storage, malware scanning, or retention policy. Do not use public URLs or local application storage as a workaround; resolve OQ-25 and configure private storage before enabling file transfer.
+- The implementation uses a small MedNet clinical-entry model, not a claim of full FHIR conformance. Clinical codes are optional references and are not validated against a terminology server. Entries from consultations, medications, vitals and laboratories will be connected as those modules are implemented.
 
 ---
 

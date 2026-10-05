@@ -28,6 +28,8 @@ import com.mednet.admin.data.ServiceRequestEntity;
 import com.mednet.admin.data.ServiceRequestRepository;
 import com.mednet.provider.data.ProviderApplicationEntity;
 import com.mednet.provider.data.ProviderApplicationRepository;
+import com.mednet.record.data.ClinicalRecordRepository;
+import com.mednet.record.data.PatientProviderRecordConsentRepository;
 
 @Service
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url")
@@ -44,16 +46,22 @@ public class AdminWorkflowService {
     private final PlatformAccountRepository accounts;
     private final ServiceRequestRepository requests;
     private final AdminAuditEventRepository auditEvents;
+    private final ClinicalRecordRepository clinicalRecords;
+    private final PatientProviderRecordConsentRepository recordConsents;
 
     public AdminWorkflowService(
             ProviderApplicationRepository providers,
             PlatformAccountRepository accounts,
             ServiceRequestRepository requests,
-            AdminAuditEventRepository auditEvents) {
+            AdminAuditEventRepository auditEvents,
+            ClinicalRecordRepository clinicalRecords,
+            PatientProviderRecordConsentRepository recordConsents) {
         this.providers = providers;
         this.accounts = accounts;
         this.requests = requests;
         this.auditEvents = auditEvents;
+        this.clinicalRecords = clinicalRecords;
+        this.recordConsents = recordConsents;
     }
 
     @Transactional(readOnly = true)
@@ -133,6 +141,11 @@ public class AdminWorkflowService {
     public PlatformAccount changeAccountType(String id, String accountType, String actor) {
         PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
         String nextType = requireStatus(accountType, ACCOUNT_TYPES);
+        if (hasClinicalAccountData(entity)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Accounts linked to medical records or record consent cannot change account type");
+        }
         entity.changeAccountType(nextType);
         audit(actor, "account.role_changed", "account", id);
         return toModel(entity);
@@ -141,8 +154,26 @@ public class AdminWorkflowService {
     @Transactional
     public void deleteAccount(String id, String actor) {
         PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
+        if (hasClinicalAccountData(entity)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Accounts linked to medical records or record consent cannot be deleted");
+        }
         accounts.delete(entity);
         audit(actor, "account.deleted", "account", id);
+    }
+
+    private boolean hasClinicalAccountData(PlatformAccountEntity account) {
+        if (clinicalRecords.existsByPatientAccountIdOrAuthorAccountId(account.getId(), account.getId())
+                || recordConsents.existsByPatientAccountId(account.getId())) {
+            return true;
+        }
+        if ("PROVIDER".equals(account.getAccountType())) {
+            return providers.findFirstByEmailIgnoreCaseOrderByCreatedAtDesc(account.getEmail())
+                    .map(provider -> recordConsents.existsByProviderApplicationId(provider.getId()))
+                    .orElse(false);
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)
