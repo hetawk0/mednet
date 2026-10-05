@@ -116,6 +116,33 @@ class MedNetApplicationTests {
     }
 
     @Test
+    void authenticationEndpointsRejectInvalidEmailAndResetCodeShapes() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"not-an-email","password":"LongEnoughPassword123!"}
+                        """))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"not-an-email"}
+                        """))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/v1/auth/reset-password/verify")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"person@example.test","code":"123"}
+                        """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void passwordResetRequiresVerifiedEmailCodeAndConsumesTicket() throws Exception {
         String resetEmail = "reset-" + UUID.randomUUID() + "@mednet.test";
         String previousPassword = "PreviousSecurePassword123!";

@@ -17,6 +17,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.auth.AuthTokenService;
@@ -52,7 +58,7 @@ public class AccountAuthController {
 
     @PostMapping("/register")
     @Transactional
-    public ResponseEntity<MessageResponse> register(@RequestBody CredentialsRequest request) {
+    public ResponseEntity<MessageResponse> register(@Valid @RequestBody CredentialsRequest request) {
         String normalizedEmail = normalize(request.email());
         validatePassword(request.password());
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalizedEmail).orElse(null);
@@ -70,7 +76,7 @@ public class AccountAuthController {
 
     @PostMapping("/resend-verification")
     @Transactional
-    public ResponseEntity<MessageResponse> resendVerification(@RequestBody EmailRequest request) {
+    public ResponseEntity<MessageResponse> resendVerification(@Valid @RequestBody EmailRequest request) {
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(request.email())).orElse(null);
         if (account != null && !account.isEmailVerified()) {
             sendVerification(account);
@@ -97,7 +103,7 @@ public class AccountAuthController {
 
     @PostMapping("/forgot-password")
     @Transactional
-    public ResponseEntity<MessageResponse> forgotPassword(@RequestBody EmailRequest request) {
+    public ResponseEntity<MessageResponse> forgotPassword(@Valid @RequestBody EmailRequest request) {
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(request.email())).orElse(null);
         if (account != null && account.isEmailVerified()) {
             IssuedToken code = tokens.issueNumericCode(RESET_CODE_LIFETIME);
@@ -122,7 +128,7 @@ public class AccountAuthController {
     @PostMapping("/reset-password/verify")
     @Transactional
     public ResponseEntity<ResetVerificationResponse> verifyPasswordResetCode(
-            @RequestBody ResetCodeRequest request) {
+            @Valid @RequestBody ResetCodeRequest request) {
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(request.email())).orElse(null);
         if (account == null || account.isPasswordResetVerified()) {
             return invalidResetCode();
@@ -154,7 +160,7 @@ public class AccountAuthController {
 
     @PostMapping("/reset-password")
     @Transactional
-    public MessageResponse resetPassword(@RequestBody ResetPasswordRequest request) {
+    public MessageResponse resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         validatePassword(request.password());
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(request.email())).orElseThrow(
                 () -> new AuthRequestException("Reset link is invalid or expired"));
@@ -211,19 +217,27 @@ public class AccountAuthController {
                 .body(new ResetVerificationResponse(null, "The code is invalid or expired. Request a new code."));
     }
 
-    public record CredentialsRequest(String email, String password, String accountType) {
+    public record CredentialsRequest(
+            @NotBlank @Email @Size(max = 254) String email,
+            @NotBlank @Size(min = 12) String password,
+            @Size(max = 16) String accountType) {
     }
 
-    public record EmailRequest(String email) {
+    public record EmailRequest(@NotBlank @Email @Size(max = 254) String email) {
     }
 
-    public record ResetCodeRequest(String email, String code) {
+    public record ResetCodeRequest(
+            @NotBlank @Email @Size(max = 254) String email,
+            @NotBlank @Pattern(regexp = "\\d{6}") String code) {
     }
 
     public record ResetVerificationResponse(String token, String message) {
     }
 
-    public record ResetPasswordRequest(String email, String token, String password) {
+    public record ResetPasswordRequest(
+            @NotBlank @Email @Size(max = 254) String email,
+            @NotBlank @Size(max = 128) String token,
+            @NotBlank @Size(min = 12) String password) {
     }
 
     public record MessageResponse(String message) {

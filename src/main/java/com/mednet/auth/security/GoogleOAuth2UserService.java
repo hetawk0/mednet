@@ -25,7 +25,7 @@ import com.mednet.admin.data.ProviderApplicationRepository;
 
 public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
 
-    private final DefaultOAuth2UserService delegate = new DefaultOAuth2UserService();
+    private final OAuth2UserService<OAuth2UserRequest, OAuth2User> delegate;
     private final PlatformAccountRepository accounts;
     private final ProviderApplicationRepository providers;
     private final String adminEmail;
@@ -34,9 +34,18 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
             PlatformAccountRepository accounts,
             ProviderApplicationRepository providers,
             @Value("${mednet.admin.email:}") String adminEmail) {
+        this(accounts, providers, adminEmail, new DefaultOAuth2UserService());
+    }
+
+    GoogleOAuth2UserService(
+            PlatformAccountRepository accounts,
+            ProviderApplicationRepository providers,
+            String adminEmail,
+            OAuth2UserService<OAuth2UserRequest, OAuth2User> delegate) {
         this.accounts = accounts;
         this.providers = providers;
         this.adminEmail = adminEmail.trim().toLowerCase(Locale.ROOT);
+        this.delegate = delegate;
     }
 
     @Override
@@ -55,9 +64,9 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         if (!adminEmail.isBlank() && adminEmail.equals(normalizedEmail)) {
             role = "SUPER_ADMIN";
         } else {
-            role = providers.findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(
-                    normalizedEmail, "APPROVED").isPresent() ? "PROVIDER" : "PATIENT";
-            linkAccount(normalizedEmail, subject, role);
+            boolean providerApproved = providers.findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(
+                    normalizedEmail, "APPROVED").isPresent();
+            role = linkAccount(normalizedEmail, subject, providerApproved);
         }
 
         Set<GrantedAuthority> authorities = new HashSet<>(googleUser.getAuthorities());
@@ -65,14 +74,15 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         return new DefaultOAuth2User(authorities, googleUser.getAttributes(), "sub");
     }
 
-    private void linkAccount(String email, String subject, String role) {
+    private String linkAccount(String email, String subject, boolean providerApproved) {
         PlatformAccountEntity subjectAccount = accounts.findFirstByGoogleSubject(subject).orElse(null);
         if (subjectAccount != null && !subjectAccount.getEmail().equalsIgnoreCase(email)) {
             throw authenticationError("Google identity is already linked to another account");
         }
 
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(email)
-                .orElseGet(() -> new PlatformAccountEntity(UUID.randomUUID().toString(), email, role));
+                .orElseGet(() -> new PlatformAccountEntity(
+                        UUID.randomUUID().toString(), email, providerApproved ? "PROVIDER" : "PATIENT"));
         if ("SUSPENDED".equals(account.getStatus())) {
             throw authenticationError("This MedNet account is suspended");
         }
@@ -80,6 +90,10 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
             throw authenticationError("This MedNet account is linked to another Google identity");
         }
 
+        String role = switch (account.getAccountType()) {
+            case "ADMIN", "SUPER_ADMIN" -> account.getAccountType();
+            default -> providerApproved ? "PROVIDER" : "PATIENT";
+        };
         account.linkGoogleSubject(subject);
         account.changeAccountType(role);
         try {
@@ -87,6 +101,7 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         } catch (DataIntegrityViolationException exception) {
             throw authenticationError("Google identity could not be linked to this account");
         }
+        return role;
     }
 
     private static OAuth2AuthenticationException authenticationError(String message) {
