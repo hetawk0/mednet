@@ -286,7 +286,7 @@ Each module below states its purpose, the roles involved, the numbered requireme
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Dependencies        | M-01 (patient account), M-02 (approved provider and published availability), M-11 (notifications).                                                                                                                                                                                                                                         |
 | Acceptance criteria | A patient can complete a booking from provider selection to confirmation in a single session. The provider receives the request and the patient is told the outcome. An appointment slot already taken is no longer offered to other patients. A cancelled appointment disappears from both parties' upcoming lists and both are notified. |
-| Open questions      | Whether an appointment is confirmed automatically or only once the provider accepts it (OQ-13). Whether appointments distinguish between in-person and virtual attendance (OQ-14). Whether appointments are paid for, and if so at what point (OQ-15). Whether cancellation windows or no-show rules apply (OQ-16).                        |
+| Open questions      | Whether appointments distinguish between in-person and virtual attendance (OQ-14). Whether appointments are paid for, and if so at what point (OQ-15). Whether cancellation windows or no-show rules apply (OQ-16). |
 
 ### 9.4 Module M-04 — Patient–Doctor Messaging
 
@@ -1068,10 +1068,10 @@ This section consolidates points on which the source document is silent. Questio
 | OQ-10 | Providers     | **Implementation decision (2026-10-05):** onboard individual providers only; facility-based provider accounts are not included in this implementation.          | Resolved* |
 | OQ-11 | Providers     | **Implementation decision (2026-10-05):** the public directory shows display name, specialty, and credential reference; provider email remains private.          | Resolved* |
 | OQ-12 | Providers     | Can patients rate or review providers?                                                                                                                         | Medium   |
-| OQ-13 | Appointments  | Is a booking confirmed automatically, or only once the provider accepts it?                                                                                    | Blocking |
-| OQ-14 | Appointments  | Do appointments distinguish between in-person and virtual attendance?                                                                                          | High     |
-| OQ-15 | Commercial    | Are any MedNet services chargeable — appointments, consultations, home healthcare, laboratory services? If so, how and when is payment taken?                  | Blocking |
-| OQ-16 | Appointments  | Do cancellation windows or no-show rules apply?                                                                                                                | Medium   |
+| OQ-13 | Appointments  | **Implementation decision (2026-10-05):** patient requests stay pending until the assigned provider accepts; providers may also decline or propose another slot. | Resolved* |
+| OQ-14 | Appointments  | Do appointments distinguish between in-person and virtual attendance? The current API records a time only and has no attendance-mode field.                    | High     |
+| OQ-15 | Commercial    | Are any MedNet services chargeable — appointments, consultations, home healthcare, laboratory services? The current appointment API does not process payment. | Blocking |
+| OQ-16 | Appointments  | Do cancellation windows or no-show rules apply? Current API permits cancellation before the slot starts; fees and no-show behavior remain undefined.           | Medium   |
 | OQ-17 | Messaging     | May a patient message any approved provider, or only one with whom they have an appointment or care relationship?                                              | High     |
 | OQ-18 | Messaging     | May messages include attachments such as photographs?                                                                                                          | Medium   |
 | OQ-19 | Messaging     | Is a response time expected of providers, and how are urgent messages handled?                                                                                 | High     |

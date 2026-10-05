@@ -148,8 +148,8 @@ The current API preserves its established success response bodies for frontend c
 | ------------ | ----------------------------------------------------------------------------- |
 | Auth         | `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password/verify`, `/api/v1/auth/reset-password` |
 | Patient      | `/api/v1/patients/me/profile` (current implementation), `/api/v1/patients/{id}/records` (requires approved relationship policy) |
-| Provider     | `/api/v1/providers` (approved directory), `/api/v1/providers/applications`, `/api/v1/providers/me/application`, `/api/v1/providers/{id}/availability` (planned) |
-| Appointment  | `/api/v1/appointments`, `/api/v1/appointments/{id}`                           |
+| Provider     | `/api/v1/providers` (approved directory), `/api/v1/providers/applications`, `/api/v1/providers/me/application`, `/api/v1/providers/me/availability`, `/api/v1/providers/{id}/availability` |
+| Appointment  | `/api/v1/appointments`, `/api/v1/appointments/{id}` (patient requests remain pending until provider confirmation) |
 | Message      | `/api/v1/conversations/{id}/messages`                                         |
 | Medication   | `/api/v1/patients/{id}/medications`                                           |
 | Vitals       | `/api/v1/patients/{id}/vitals`                                                |
@@ -157,6 +157,11 @@ The current API preserves its established success response bodies for frontend c
 | Lab          | `/api/v1/lab-requests`, `/api/v1/lab-results/{id}`                            |
 | Notification | `/api/v1/notifications`, `/api/v1/notifications/{id}/read`                    |
 | Admin        | `/api/v1/admin/dashboard`, `/api/v1/admin/providers/pending`                  |
+
+Availability is represented by explicit future instants (ISO-8601 timestamps), not recurring schedules. A pending or
+confirmed appointment reserves its slot. Rescheduling requires the other participant's acceptance; cancellation is
+allowed before the slot starts. The current contract intentionally has no attendance-mode, payment, cancellation-fee,
+or no-show fields while their product decisions remain open.
 
 ---
 

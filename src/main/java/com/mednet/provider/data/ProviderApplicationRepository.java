@@ -6,8 +6,11 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 public interface ProviderApplicationRepository extends JpaRepository<ProviderApplicationEntity, String> {
     List<ProviderApplicationEntity> findTop100ByOrderByCreatedAtDesc();
@@ -18,6 +21,10 @@ public interface ProviderApplicationRepository extends JpaRepository<ProviderApp
             String email, String status);
 
     Optional<ProviderApplicationEntity> findFirstByEmailIgnoreCaseOrderByCreatedAtDesc(String email);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select provider from ProviderApplicationEntity provider where provider.id = :id")
+    Optional<ProviderApplicationEntity> findByIdForUpdate(@Param("id") String id);
 
     @Query("""
             select provider from ProviderApplicationEntity provider

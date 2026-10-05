@@ -1,5 +1,7 @@
 package com.mednet;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -27,8 +29,10 @@ import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.auth.email.EkdSendEmailService;
 import com.mednet.patient.data.PatientProfileRepository;
+import com.mednet.patient.data.PatientProfileEntity;
 import com.mednet.provider.data.ProviderApplicationEntity;
 import com.mednet.provider.data.ProviderApplicationRepository;
+import com.mednet.appointment.data.AppointmentRepository;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -90,6 +94,9 @@ class MedNetApplicationTests {
 
     @Autowired
     private UserDetailsService userDetailsService;
+
+    @Autowired
+    private AppointmentRepository appointments;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -288,6 +295,163 @@ class MedNetApplicationTests {
                 .param("search", "Dr Example"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isEmpty());
+    }
+
+    @Test
+    void appointmentSlotsRequireProviderConfirmationAndProtectBothParticipants() throws Exception {
+        String providerEmail = "appointment-provider-" + UUID.randomUUID() + "@mednet.test";
+        String patientEmail = "appointment-patient-" + UUID.randomUUID() + "@mednet.test";
+        PlatformAccountEntity providerAccount = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), providerEmail, "PATIENT");
+        providerAccount.verifyEmail();
+        accounts.save(providerAccount);
+        PlatformAccountEntity patientAccount = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), patientEmail, "PATIENT");
+        patientAccount.verifyEmail();
+        accounts.save(patientAccount);
+        patientProfiles.save(new PatientProfileEntity(
+                UUID.randomUUID().toString(),
+                patientAccount.getId(),
+                "Appointment Patient",
+                LocalDate.of(1990, 4, 12),
+                "+231 770 123 456",
+                "Monrovia"));
+
+        ProviderApplicationEntity provider = new ProviderApplicationEntity(
+                UUID.randomUUID().toString(),
+                "Dr Appointment",
+                providerEmail,
+                "Family medicine",
+                "LIC-APPT-1");
+        provider.review("APPROVED", ADMIN_EMAIL);
+        providerApplications.save(provider);
+
+        Instant firstStart = Instant.now().plusSeconds(172_800).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        Instant firstEnd = firstStart.plusSeconds(1_800);
+        Instant secondStart = firstStart.plusSeconds(86_400);
+        Instant secondEnd = secondStart.plusSeconds(1_800);
+
+        MvcResult firstSlotResult = mockMvc.perform(post("/api/v1/providers/me/availability")
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"startsAt":"%s","endsAt":"%s"}
+                        """.formatted(firstStart, firstEnd)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String firstSlotId = objectMapper.readTree(firstSlotResult.getResponse().getContentAsString())
+                .get("id").asText();
+
+        mockMvc.perform(post("/api/v1/providers/me/availability")
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"startsAt":"%s","endsAt":"%s"}
+                        """.formatted(firstStart.plusSeconds(900), firstEnd.plusSeconds(900))))
+                .andExpect(status().isConflict());
+
+        MvcResult secondSlotResult = mockMvc.perform(post("/api/v1/providers/me/availability")
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"startsAt":"%s","endsAt":"%s"}
+                        """.formatted(secondStart, secondEnd)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String secondSlotId = objectMapper.readTree(secondSlotResult.getResponse().getContentAsString())
+                .get("id").asText();
+
+        mockMvc.perform(get("/api/v1/providers/{id}/availability", provider.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
+
+        MvcResult appointmentResult = mockMvc.perform(post("/api/v1/appointments")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"availabilitySlotId\":\"" + firstSlotId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andReturn();
+        String appointmentId = objectMapper.readTree(appointmentResult.getResponse().getContentAsString())
+                .get("id").asText();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/providers/me/availability/{id}", firstSlotId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf()))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(post("/api/v1/appointments")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"availabilitySlotId\":\"" + firstSlotId + "\"}"))
+                .andExpect(status().isConflict());
+
+        String otherPatientEmail = "other-patient-" + UUID.randomUUID() + "@mednet.test";
+        accounts.save(new PlatformAccountEntity(
+                UUID.randomUUID().toString(), otherPatientEmail, "PATIENT"));
+        mockMvc.perform(get("/api/v1/appointments/{id}", appointmentId)
+                .with(user(otherPatientEmail).roles("PATIENT")))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(patch("/api/v1/appointments/{id}", appointmentId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"ACCEPT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+        mockMvc.perform(get("/api/v1/appointments/{id}", appointmentId)
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.patientName").value("Appointment Patient"));
+
+        mockMvc.perform(patch("/api/v1/appointments/{id}", appointmentId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"REQUEST_RESCHEDULE\",\"proposedAvailabilitySlotId\":\""
+                        + secondSlotId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESCHEDULE_REQUESTED"));
+
+        mockMvc.perform(patch("/api/v1/appointments/{id}", appointmentId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"ACCEPT_RESCHEDULE\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/v1/appointments/{id}", appointmentId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"ACCEPT_RESCHEDULE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startsAt").value(secondStart.toString()))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        mockMvc.perform(patch("/api/v1/appointments/{id}", appointmentId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"CANCEL\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        mockMvc.perform(get("/api/v1/appointments")
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].patientName").value("Appointment Patient"));
+        mockMvc.perform(get("/api/v1/providers/{id}/availability", provider.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
+
+        assertThat(appointments.findById(appointmentId).orElseThrow().getStatus()).isEqualTo("CANCELLED");
     }
 
     @Test
