@@ -53,7 +53,7 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
         String role;
         if (!adminEmail.isBlank() && adminEmail.equals(normalizedEmail)) {
-            role = "ADMIN";
+            role = "SUPER_ADMIN";
         } else {
             role = providers.findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(
                     normalizedEmail, "APPROVED").isPresent() ? "PROVIDER" : "PATIENT";

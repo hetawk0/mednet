@@ -29,7 +29,7 @@ public class AdminAuthController {
 
     @GetMapping("/admin/session")
     public AdminSession session(Authentication authentication) {
-        return new AdminSession(email(authentication), "ADMIN");
+        return new AdminSession(email(authentication), role(authentication));
     }
 
     @GetMapping("/session")
@@ -38,13 +38,16 @@ public class AdminAuthController {
                 || authentication instanceof AnonymousAuthenticationToken) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sign-in required");
         }
-        String role = authentication.getAuthorities().stream()
+        return new AdminSession(email(authentication), role(authentication));
+    }
+
+    private static String role(Authentication authentication) {
+        return authentication.getAuthorities().stream()
                 .map(authority -> authority.getAuthority())
                 .filter(authority -> authority.startsWith("ROLE_"))
                 .map(authority -> authority.substring("ROLE_".length()))
                 .findFirst()
                 .orElse("USER");
-        return new AdminSession(email(authentication), role);
     }
 
     @GetMapping("/google/status")

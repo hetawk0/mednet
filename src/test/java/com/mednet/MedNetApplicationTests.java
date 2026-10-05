@@ -239,6 +239,37 @@ class MedNetApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.apiStatus").value("UP"))
                 .andExpect(jsonPath("$.modules[0].status").value("CONNECTED"));
+
+        mockMvc.perform(get("/api/v1/auth/admin/session").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("SUPER_ADMIN"));
+    }
+
+    @Test
+    void administratorCannotCreateOrPromotePrivilegedAccounts() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/accounts")
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"unexpected-admin@example.test\",\"accountType\":\"SUPER_ADMIN\"}"))
+                .andExpect(status().isBadRequest());
+
+        MvcResult accountResult = mockMvc.perform(post("/api/v1/admin/accounts")
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"role-target@example.test\",\"accountType\":\"PATIENT\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String accountId = objectMapper.readTree(accountResult.getResponse().getContentAsString())
+                .get("id").asText();
+
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/role", accountId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"accountType\":\"SUPER_ADMIN\"}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

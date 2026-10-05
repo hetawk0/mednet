@@ -35,6 +35,7 @@ public class AdminWorkflowService {
 
     private static final Set<String> PROVIDER_STATUSES = Set.of("PENDING", "APPROVED", "REJECTED", "SUSPENDED");
     private static final Set<String> ACCOUNT_TYPES = Set.of("PATIENT", "PROVIDER", "ADMIN", "SUPER_ADMIN");
+    private static final Set<String> CREATABLE_ACCOUNT_TYPES = Set.of("PATIENT", "PROVIDER");
     private static final Set<String> ACCOUNT_STATUSES = Set.of("ACTIVE", "SUSPENDED");
     private static final Set<String> REQUEST_TYPES = Set.of("APPOINTMENT", "HOME_CARE", "LABORATORY");
     private static final Set<String> REQUEST_STATUSES = Set.of("OPEN", "IN_PROGRESS", "RESOLVED", "CANCELLED");
@@ -108,7 +109,7 @@ public class AdminWorkflowService {
 
     @Transactional
     public PlatformAccount createAccount(String email, String accountType, String actor) {
-        String type = requireStatus(accountType, ACCOUNT_TYPES);
+        String type = requireStatus(accountType, CREATABLE_ACCOUNT_TYPES);
         try {
             PlatformAccountEntity entity = accounts.save(new PlatformAccountEntity(
                     UUID.randomUUID().toString(), normalizeEmail(email), type));

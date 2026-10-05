@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,13 +47,13 @@ public class AdminWorkflowController {
             @Valid @RequestBody CreateProviderRequest request, Authentication actor) {
         return service.createProvider(
                 request.displayName(), request.email(), request.specialty(), request.credentialReference(),
-                actor.getName());
+                actorEmail(actor));
     }
 
     @PatchMapping("/providers/{id}/status")
     public ProviderApplication reviewProvider(
             @PathVariable String id, @Valid @RequestBody StatusRequest request, Authentication actor) {
-        return service.reviewProvider(id, request.status(), actor.getName());
+        return service.reviewProvider(id, request.status(), actorEmail(actor));
     }
 
     @GetMapping("/accounts")
@@ -66,27 +67,27 @@ public class AdminWorkflowController {
 
     @PostMapping("/accounts")
     public PlatformAccount createAccount(@Valid @RequestBody CreateAccountRequest request, Authentication actor) {
-        return service.createAccount(request.email(), request.accountType(), actor.getName());
+        return service.createAccount(request.email(), request.accountType(), actorEmail(actor));
     }
 
     @PatchMapping("/accounts/{id}/status")
     public PlatformAccount changeAccountStatus(
             @PathVariable String id, @Valid @RequestBody StatusRequest request, Authentication actor) {
-        return service.changeAccountStatus(id, request.status(), actor.getName());
+        return service.changeAccountStatus(id, request.status(), actorEmail(actor));
     }
 
     @PatchMapping("/accounts/{id}/role")
     @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPER_ADMIN')")
     public PlatformAccount changeAccountRole(
             @PathVariable String id, @Valid @RequestBody RoleRequest request, Authentication actor) {
-        return service.changeAccountType(id, request.accountType(), actor.getName());
+        return service.changeAccountType(id, request.accountType(), actorEmail(actor));
     }
 
     @org.springframework.web.bind.annotation.DeleteMapping("/accounts/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPER_ADMIN')")
     public org.springframework.http.ResponseEntity<Void> deleteAccount(
             @PathVariable String id, Authentication actor) {
-        service.deleteAccount(id, actor.getName());
+        service.deleteAccount(id, actorEmail(actor));
         return org.springframework.http.ResponseEntity.noContent().build();
     }
 
@@ -98,18 +99,28 @@ public class AdminWorkflowController {
     @PostMapping("/requests")
     public ServiceRequest createRequest(@Valid @RequestBody CreateRequest request, Authentication actor) {
         return service.createRequest(
-                request.referenceId(), request.requestType(), request.requesterEmail(), actor.getName());
+                request.referenceId(), request.requestType(), request.requesterEmail(), actorEmail(actor));
     }
 
     @PatchMapping("/requests/{id}/status")
     public ServiceRequest changeRequestStatus(
             @PathVariable String id, @Valid @RequestBody StatusRequest request, Authentication actor) {
-        return service.changeRequestStatus(id, request.status(), actor.getName());
+        return service.changeRequestStatus(id, request.status(), actorEmail(actor));
     }
 
     @GetMapping("/audit")
     public List<AdminAuditEvent> auditEvents() {
         return service.audit();
+    }
+
+    private static String actorEmail(Authentication actor) {
+        if (actor.getPrincipal() instanceof OAuth2User user) {
+            String email = user.getAttribute("email");
+            if (email != null && !email.isBlank()) {
+                return email;
+            }
+        }
+        return actor.getName();
     }
 
     public record CreateProviderRequest(

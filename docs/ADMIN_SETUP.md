@@ -40,7 +40,7 @@ Create a Google OAuth client with application type **Web application**. Add thes
 
 Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the environment-specific `GOOGLE_REDIRECT_URI` in `.env` locally or LPAD for production. Google is automatically enabled when the client credentials are present. The Google client secret stays on the Spring server; never prefix it with `NEXT_PUBLIC_` or expose it to the web client.
 
-Only verified Google email addresses are accepted. The email matching `MEDNET_ADMIN_EMAIL` receives the administrator role; other new Google accounts default to patient access. A provider role is assigned only when an administrator has approved an application for that email. Google login also requires the PostgreSQL datasource because account identity is persisted there.
+Only verified Google email addresses are accepted. The email matching `MEDNET_ADMIN_EMAIL` receives the `SUPER_ADMIN` role; other new Google accounts default to patient access. A provider role is assigned only when an administrator has approved an application for that email. Google login also requires the PostgreSQL datasource because account identity is persisted there.
 
 If Google returns to `/sign-in?error=google`, the page shows a generic recovery message while the API logs a provider error code or a MedNet account-policy rejection. Confirm the registered redirect URI above and inspect the API logs; never include client secrets or tokens in support reports.
 

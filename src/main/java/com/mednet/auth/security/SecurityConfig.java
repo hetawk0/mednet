@@ -136,7 +136,8 @@ public class SecurityConfig {
                     .userInfoEndpoint(endpoint -> endpoint.userService(configuredUserService))
                     .successHandler((request, response, authentication) -> {
                         boolean isAdmin = authentication.getAuthorities().stream()
-                                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+                                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN")
+                                        || authority.getAuthority().equals("ROLE_SUPER_ADMIN"));
                         response.sendRedirect(isAdmin ? "/admin" : "/account");
                     })
                     .failureHandler((request, response, exception) -> {
