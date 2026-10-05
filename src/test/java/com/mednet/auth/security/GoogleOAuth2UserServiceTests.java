@@ -14,7 +14,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
-import com.mednet.admin.data.ProviderApplicationRepository;
+import com.mednet.provider.data.ProviderApplicationRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;

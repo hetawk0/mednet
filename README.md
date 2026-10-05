@@ -57,6 +57,6 @@ npm run build
 
 ## Current scope
 
-The backend supports account authentication, a self-scoped patient profile, provider application review, a non-clinical account registry, admin-entered service-request records, and audit events when PostgreSQL is configured. Account status changes are not yet enforced by patient/provider sign-in, and service requests are not yet connected to patient submission or notification flows. No clinical record payloads are exposed in the admin area.
+The backend supports account authentication, a self-scoped patient profile, individual provider applications and an approved-provider directory, a non-clinical account registry, admin-entered service-request records, and audit events when PostgreSQL is configured. Provider authority and directory visibility require an approved application. Account suspension is enforced by sign-in; service requests are not yet connected to patient submission or notification flows. No clinical record payloads are exposed in the admin area.
 
 Product, safety, and platform decisions remain open in [the requirements document](docs/req.md). The architecture and API guidance are in [Production Architecture Guide](docs/PRODUCTION_ARCHITECTURE_GUIDE.md) and [Backend/API Plan](docs/backend-api-plan.md).

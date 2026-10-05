@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -26,6 +27,8 @@ import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.auth.email.EkdSendEmailService;
 import com.mednet.patient.data.PatientProfileRepository;
+import com.mednet.provider.data.ProviderApplicationEntity;
+import com.mednet.provider.data.ProviderApplicationRepository;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -81,6 +84,12 @@ class MedNetApplicationTests {
 
     @Autowired
     private AdminAuditEventRepository auditEvents;
+
+    @Autowired
+    private ProviderApplicationRepository providerApplications;
+
+    @Autowired
+    private UserDetailsService userDetailsService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -217,6 +226,68 @@ class MedNetApplicationTests {
                         """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void providerApplicationsArePrivateUntilApprovalAndOnlyApprovedProvidersAreListed() throws Exception {
+        String providerEmail = "applicant-" + UUID.randomUUID() + "@mednet.test";
+        PlatformAccountEntity account = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), providerEmail, "PATIENT");
+        account.setPasswordHash(passwordEncoder.encode("ProviderSecurePassword123!"));
+        account.verifyEmail();
+        accounts.save(account);
+
+        MvcResult applicationResult = mockMvc.perform(post("/api/v1/providers/applications")
+                .with(user(providerEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "displayName":"Dr Example",
+                          "specialty":"Family medicine",
+                          "credentialReference":"LIC-TEST-42"
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andReturn();
+        String applicationId = objectMapper.readTree(applicationResult.getResponse().getContentAsString())
+                .get("id").asText();
+
+        assertThat(userDetailsService.loadUserByUsername(providerEmail).getAuthorities())
+                .extracting("authority")
+                .contains("ROLE_PATIENT");
+        mockMvc.perform(get("/api/v1/providers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id == '" + applicationId + "')]").isEmpty());
+
+        mockMvc.perform(get("/api/v1/providers/me/application")
+                .with(user(providerEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.credentialReference").value("LIC-TEST-42"));
+
+        ProviderApplicationEntity application = providerApplications.findById(applicationId).orElseThrow();
+        application.review("APPROVED", ADMIN_EMAIL);
+        providerApplications.save(application);
+
+        assertThat(userDetailsService.loadUserByUsername(providerEmail).getAuthorities())
+                .extracting("authority")
+                .contains("ROLE_PROVIDER");
+        mockMvc.perform(get("/api/v1/providers")
+                .param("specialty", "Family")
+                .param("search", "Example"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].displayName").value("Dr Example"))
+                .andExpect(jsonPath("$.content[0].specialty").value("Family medicine"))
+                .andExpect(jsonPath("$.content[0].credentialReference").value("LIC-TEST-42"))
+                .andExpect(jsonPath("$.content[0].email").doesNotExist());
+
+        application.review("SUSPENDED", ADMIN_EMAIL);
+        providerApplications.save(application);
+        mockMvc.perform(get("/api/v1/providers")
+                .param("search", "Dr Example"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty());
     }
 
     @Test

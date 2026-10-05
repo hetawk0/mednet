@@ -45,7 +45,7 @@ public class GoogleOAuthConfiguration {
     @Bean
     GoogleOAuth2UserService googleOAuth2UserService(
             com.mednet.admin.data.PlatformAccountRepository accounts,
-            com.mednet.admin.data.ProviderApplicationRepository providers,
+            com.mednet.provider.data.ProviderApplicationRepository providers,
             @Value("${mednet.admin.email:}") String adminEmail) {
         return new GoogleOAuth2UserService(accounts, providers, adminEmail);
     }

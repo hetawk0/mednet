@@ -258,7 +258,7 @@ Each module below states its purpose, the roles involved, the numbered requireme
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dependencies        | Administrator approval capability in M-12.                                                                                                                                                                                                                                                                                                                                   |
 | Acceptance criteria | A provider can submit an application and is told clearly that it is pending review. An unapproved provider does not appear in patient search results. Once approved, the provider appears in the directory and can be selected for an appointment. A patient searching for a specialty sees the approved providers offering it.                                              |
-| Open questions      | What professional credentials must be supplied and how they are verified — for example against the Liberia Medical and Dental Council register (OQ-09). Whether providers are onboarded individually or through their hospital or facility (OQ-10). What information a provider profile displays to patients (OQ-11). Whether patients can rate or review providers (OQ-12). |
+| Open questions      | What professional credentials must be supplied and how they are verified — for example against the Liberia Medical and Dental Council register (OQ-09). Whether patients can rate or review providers (OQ-12). |
 
 ### 9.3 Module M-03 — Appointment Booking
 
@@ -1052,7 +1052,7 @@ The following assumptions have been made in preparing this document. If any is i
 
 ## 19. Open Questions Requiring Client Confirmation
 
-This section consolidates every point on which the source document is silent. Questions marked "Blocking" prevent design or estimation from proceeding in the affected area.
+This section consolidates points on which the source document is silent. Questions marked "Blocking" prevent design or estimation from proceeding in the affected area. OQ-10 and OQ-11 have user-approved implementation decisions recorded below; these are implementation scope choices, not independent confirmation of the missing client source, and remain subject to sponsor confirmation.
 
 | Ref   | Area          | Question                                                                                                                                                       | Urgency  |
 | ----- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -1065,8 +1065,8 @@ This section consolidates every point on which the source document is silent. Qu
 | OQ-07 | Records       | Which providers may see which parts of a patient's medical record, and does the patient control that access?                                                   | Blocking |
 | OQ-08 | Registration  | May one account manage dependants, such as a parent managing a child's care?                                                                                   | High     |
 | OQ-09 | Providers     | What professional credentials must a provider supply, and how are they verified?                                                                               | Blocking |
-| OQ-10 | Providers     | Are providers onboarded individually, or through their hospital or facility?                                                                                   | Blocking |
-| OQ-11 | Providers     | What information does a provider profile show to patients?                                                                                                     | High     |
+| OQ-10 | Providers     | **Implementation decision (2026-10-05):** onboard individual providers only; facility-based provider accounts are not included in this implementation.          | Resolved* |
+| OQ-11 | Providers     | **Implementation decision (2026-10-05):** the public directory shows display name, specialty, and credential reference; provider email remains private.          | Resolved* |
 | OQ-12 | Providers     | Can patients rate or review providers?                                                                                                                         | Medium   |
 | OQ-13 | Appointments  | Is a booking confirmed automatically, or only once the provider accepts it?                                                                                    | Blocking |
 | OQ-14 | Appointments  | Do appointments distinguish between in-person and virtual attendance?                                                                                          | High     |

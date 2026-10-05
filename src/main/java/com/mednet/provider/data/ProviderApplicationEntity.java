@@ -1,4 +1,4 @@
-package com.mednet.admin.data;
+package com.mednet.provider.data;
 
 import java.time.Instant;
 

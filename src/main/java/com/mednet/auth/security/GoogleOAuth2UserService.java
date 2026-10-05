@@ -21,7 +21,7 @@ import org.springframework.util.StringUtils;
 
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
-import com.mednet.admin.data.ProviderApplicationRepository;
+import com.mednet.provider.data.ProviderApplicationRepository;
 
 public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
 

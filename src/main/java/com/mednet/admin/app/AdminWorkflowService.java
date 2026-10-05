@@ -24,10 +24,10 @@ import com.mednet.admin.data.AdminWorkflowModels.ProviderApplication;
 import com.mednet.admin.data.AdminWorkflowModels.ServiceRequest;
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
-import com.mednet.admin.data.ProviderApplicationEntity;
-import com.mednet.admin.data.ProviderApplicationRepository;
 import com.mednet.admin.data.ServiceRequestEntity;
 import com.mednet.admin.data.ServiceRequestRepository;
+import com.mednet.provider.data.ProviderApplicationEntity;
+import com.mednet.provider.data.ProviderApplicationRepository;
 
 @Service
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url")

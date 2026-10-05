@@ -33,6 +33,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.api.ApiRequestIdFilter;
+import com.mednet.provider.data.ProviderApplicationRepository;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration
@@ -51,7 +52,8 @@ public class SecurityConfig {
             @Value("${mednet.admin.email:}") String adminEmail,
             @Value("${mednet.admin.password:}") String adminPassword,
             PasswordEncoder passwordEncoder,
-            PlatformAccountRepository accounts) {
+            PlatformAccountRepository accounts,
+            ProviderApplicationRepository providers) {
         String normalizedAdminEmail = adminEmail.trim().toLowerCase(Locale.ROOT);
         UserDetails administrator = normalizedAdminEmail.isBlank() || adminPassword.isBlank()
                 ? null
@@ -70,9 +72,16 @@ public class SecurityConfig {
             if (account.getPasswordHash() == null) {
                 throw new UsernameNotFoundException("Password sign-in is not configured for this account");
             }
+            String role = account.getAccountType();
+            if (role.equals("PATIENT") || role.equals("PROVIDER")) {
+                boolean approvedProvider = providers
+                        .findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(normalizedUsername, "APPROVED")
+                        .isPresent();
+                role = approvedProvider ? "PROVIDER" : "PATIENT";
+            }
             return User.withUsername(account.getEmail())
                     .password(account.getPasswordHash())
-                    .roles(account.getAccountType())
+                    .roles(role)
                     .disabled("SUSPENDED".equals(account.getStatus()))
                     .accountExpired(!account.isEmailVerified())
                     .build();
