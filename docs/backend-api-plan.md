@@ -147,7 +147,7 @@ The current API preserves its established success response bodies for frontend c
 | Group        | Example endpoints                                                             |
 | ------------ | ----------------------------------------------------------------------------- |
 | Auth         | `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password/verify`, `/api/v1/auth/reset-password` |
-| Patient      | `/api/v1/patients/{id}`, `/api/v1/patients/{id}/records`                      |
+| Patient      | `/api/v1/patients/me/profile` (current implementation), `/api/v1/patients/{id}/records` (requires approved relationship policy) |
 | Provider     | `/api/v1/providers`, `/api/v1/providers/{id}/availability`                    |
 | Appointment  | `/api/v1/appointments`, `/api/v1/appointments/{id}`                           |
 | Message      | `/api/v1/conversations/{id}/messages`                                         |

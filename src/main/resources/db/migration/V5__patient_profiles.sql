@@ -1,0 +1,11 @@
+CREATE TABLE patient_profiles (
+    id VARCHAR(36) PRIMARY KEY,
+    account_id VARCHAR(36) NOT NULL UNIQUE
+        REFERENCES platform_accounts (id) ON DELETE CASCADE,
+    full_name VARCHAR(160) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    phone_number VARCHAR(32) NOT NULL,
+    address VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

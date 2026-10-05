@@ -23,7 +23,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.ObjectMapper;
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
+import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.auth.email.EkdSendEmailService;
+import com.mednet.patient.data.PatientProfileRepository;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -73,6 +75,12 @@ class MedNetApplicationTests {
 
     @Autowired
     private PlatformAccountRepository accounts;
+
+    @Autowired
+    private PatientProfileRepository patientProfiles;
+
+    @Autowired
+    private AdminAuditEventRepository auditEvents;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -128,6 +136,87 @@ class MedNetApplicationTests {
                 .header("X-Request-Id", "invalid request id"))
                 .andExpect(status().isOk())
                 .andExpect(header().exists("X-Request-Id"));
+    }
+
+    @Test
+    void patientCanCreateAndUpdateOnlyTheirOwnProfile() throws Exception {
+        String email = "profile-" + UUID.randomUUID() + "@mednet.test";
+        PlatformAccountEntity account = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), email, "PATIENT");
+        account.verifyEmail();
+        accounts.save(account);
+
+        long auditsBefore = auditEvents.count();
+        String profileJson = """
+                {
+                  "fullName":"Patient Example",
+                  "dateOfBirth":"1990-04-12",
+                  "phoneNumber":"+231 770 123 456",
+                  "address":"Monrovia, Liberia"
+                }
+                """;
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                "/api/v1/patients/me/profile")
+                .with(user(email).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(profileJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Patient Example"))
+                .andExpect(jsonPath("$.dateOfBirth").value("1990-04-12"));
+
+        String profileId = patientProfiles.findFirstByAccountId(account.getId()).orElseThrow().getId();
+        mockMvc.perform(get("/api/v1/patients/me/profile")
+                .with(user(email).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.phoneNumber").value("+231 770 123 456"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                "/api/v1/patients/me/profile")
+                .with(user(email).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(profileJson.replace("Patient Example", "Updated Patient")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Updated Patient"));
+
+        assertThat(patientProfiles.findFirstByAccountId(account.getId()).orElseThrow().getId())
+                .isEqualTo(profileId);
+        assertThat(auditEvents.count()).isEqualTo(auditsBefore + 2);
+
+        mockMvc.perform(get("/api/v1/patients/{id}/profile", profileId)
+                .with(user(email).roles("PATIENT")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void nonPatientCannotAccessPatientProfileAndInvalidBirthDateIsRejected() throws Exception {
+        String providerEmail = "profile-provider-" + UUID.randomUUID() + "@mednet.test";
+        accounts.save(new PlatformAccountEntity(UUID.randomUUID().toString(), providerEmail, "PROVIDER"));
+
+        mockMvc.perform(get("/api/v1/patients/me/profile")
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+
+        String patientEmail = "invalid-profile-" + UUID.randomUUID() + "@mednet.test";
+        accounts.save(new PlatformAccountEntity(UUID.randomUUID().toString(), patientEmail, "PATIENT"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                "/api/v1/patients/me/profile")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "fullName":"Patient Example",
+                          "dateOfBirth":"2999-01-01",
+                          "phoneNumber":"123",
+                          "address":"Monrovia"
+                        }
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }
 
     @Test
