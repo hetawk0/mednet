@@ -1,6 +1,8 @@
 package com.mednet.auth.security;
 
 import java.util.Locale;
+import java.util.Map;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
@@ -21,6 +23,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import static org.springframework.security.config.http.SessionCreationPolicy.IF_REQUIRED;
 
@@ -29,6 +32,8 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
+import com.mednet.api.ApiRequestIdFilter;
+import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 @EnableMethodSecurity
@@ -80,7 +85,8 @@ public class SecurityConfig {
             ObjectProvider<GoogleOAuth2UserService> googleUserService,
             ObjectProvider<ClientRegistrationRepository> registrations,
             @Value("${mednet.google.enabled:false}") boolean googleEnabled,
-            @Value("${server.servlet.session.cookie.secure:true}") boolean secureCookies) throws Exception {
+            @Value("${server.servlet.session.cookie.secure:true}") boolean secureCookies,
+            ObjectMapper objectMapper) throws Exception {
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfTokenRepository.setCookieCustomizer(cookie -> cookie
                 .path("/")
@@ -95,6 +101,16 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/actuator/health",
                                 "/actuator/health/**",
+                                "/error")
+                        .permitAll()
+                        .requestMatchers(
+                                "/api-docs",
+                                "/api-docs/**",
+                                "/swagger-ui",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html")
+                        .hasAnyRole("ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(
                                 "/api/v1/auth/csrf",
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/register",
@@ -115,15 +131,20 @@ public class SecurityConfig {
                         .usernameParameter("email")
                         .passwordParameter("password")
                         .successHandler(loginSuccess)
-                        .failureHandler((request, response, exception) -> writeUnauthorized(response,
-                                "Invalid email or password")))
+                        .failureHandler((request, response, exception) -> writeError(
+                                objectMapper, request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                                "UNAUTHORIZED", "Invalid email or password")))
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")
                         .logoutSuccessHandler((request, response, authentication) -> response
                                 .setStatus(HttpServletResponse.SC_NO_CONTENT)))
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint((request, response, exception) -> writeUnauthorized(response,
-                                "Administrator authentication required")))
+                        .authenticationEntryPoint((request, response, exception) -> writeError(
+                                objectMapper, request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                                "UNAUTHORIZED", "Sign-in required"))
+                        .accessDeniedHandler((request, response, exception) -> writeError(
+                                objectMapper, request, response, HttpServletResponse.SC_FORBIDDEN,
+                                "FORBIDDEN", "You do not have permission to perform this action")))
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(IF_REQUIRED)
                         .sessionFixation(fixation -> fixation.migrateSession()));
@@ -160,10 +181,21 @@ public class SecurityConfig {
         return http.build();
     }
 
-    private static void writeUnauthorized(HttpServletResponse response, String message)
+    private static void writeError(
+            ObjectMapper objectMapper,
+            HttpServletRequest request,
+            HttpServletResponse response,
+            int status,
+            String code,
+            String message)
             throws java.io.IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        String requestId = (String) request.getAttribute(ApiRequestIdFilter.ATTRIBUTE_NAME);
+        response.setStatus(status);
         response.setContentType("application/json");
-        response.getWriter().write("{\"error\":\"" + message + "\"}");
+        objectMapper.writeValue(response.getOutputStream(), Map.of(
+                "success", false,
+                "error", Map.of("code", code, "message", message, "details", List.of()),
+                "detail", message,
+                "meta", Map.of("requestId", requestId == null ? "" : requestId)));
     }
 }

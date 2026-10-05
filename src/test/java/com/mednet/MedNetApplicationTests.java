@@ -30,6 +30,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -94,7 +95,51 @@ class MedNetApplicationTests {
     @Test
     void adminOverviewRequiresAdministratorAuthentication() throws Exception {
         mockMvc.perform(get("/api/v1/admin/overview"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.meta.requestId").isNotEmpty());
+    }
+
+    @Test
+    void requestIdsAreReturnedAndIncludedInValidationErrors() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/google/status")
+                .header("X-Request-Id", "mednet-test-42"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Request-Id", "mednet-test-42"));
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                .header("X-Request-Id", "validation-check")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"invalid","password":"short"}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("X-Request-Id", "validation-check"))
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.meta.requestId").value("validation-check"))
+                .andExpect(jsonPath("$.error.details[0].field").exists());
+    }
+
+    @Test
+    void requestIdsAreGeneratedWhenClientValueIsInvalid() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/google/status")
+                .header("X-Request-Id", "invalid request id"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"));
+    }
+
+    @Test
+    void openApiSpecificationIsAvailableOnlyToAdministrators() throws Exception {
+        mockMvc.perform(get("/api-docs"))
                 .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api-docs")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.info.title").value("MedNet API"))
+                .andExpect(jsonPath("$.openapi").exists());
     }
 
     @Test

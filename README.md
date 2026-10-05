@@ -23,6 +23,9 @@ mvn spring-boot:run
 
 Spring Boot imports the root `.env` file for local runs. The root `.gitignore` excludes `.env`; never commit it. Flyway applies versioned SQL migrations from `src/main/resources/db/migration` at API startup. The API listens on `http://localhost:8080` by default. Check health at `http://localhost:8080/actuator/health`.
 
+The OpenAPI specification is available at `http://localhost:8080/api-docs` and Swagger UI at
+`http://localhost:8080/swagger-ui` after administrator sign-in.
+
 In a second terminal at the repository root, install and start the web client:
 
 ```sh

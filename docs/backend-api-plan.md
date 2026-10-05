@@ -108,6 +108,10 @@ com.mednet
 - Audit trail for clinical state changes
 - No stack traces in production responses
 
+The current API preserves its established success response bodies for frontend compatibility. Errors use a structured
+`success: false` envelope with a stable code, details, and request ID; successful responses will move to the full
+`success` / `data` / `meta` envelope as part of a coordinated API and client contract change.
+
 ### Response envelope
 
 ```json
