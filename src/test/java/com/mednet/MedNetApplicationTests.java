@@ -697,6 +697,46 @@ class MedNetApplicationTests {
                 .with(csrf()))
                 .andExpect(status().isNotFound());
 
+        MvcResult consultationResult = mockMvc.perform(post(
+                        "/api/v1/appointments/{id}/consultation", appointment.getId())
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andReturn();
+        String consultationId = objectMapper.readTree(consultationResult.getResponse().getContentAsString())
+                .get("id").asText();
+        mockMvc.perform(post("/api/v1/consultations/{id}/messages", consultationId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"body\":\"Text consultation follow-up\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Text consultation follow-up"));
+        mockMvc.perform(get("/api/v1/consultations/{id}/messages", consultationId)
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].body").value("Text consultation follow-up"));
+        mockMvc.perform(get("/api/v1/consultations/{id}", consultationId)
+                .with(user(unrelatedPatient).roles("PATIENT")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(patch("/api/v1/consultations/{id}/end", consultationId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/v1/consultations/{id}/end", consultationId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ENDED"));
+        mockMvc.perform(post("/api/v1/consultations/{id}/messages", consultationId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"body\":\"A message after consultation end\"}"))
+                .andExpect(status().isConflict());
+
         mockMvc.perform(get("/api/v1/patients/{patientId}/vitals", patient.getId())
                 .with(user(providerEmail).roles("PROVIDER")))
                 .andExpect(status().isForbidden());
