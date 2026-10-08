@@ -819,6 +819,14 @@ class MedNetApplicationTests {
                         """.formatted(homeCareStaff.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.assignedStaffAccountId").value(homeCareStaff.getId()));
+        mockMvc.perform(patch("/api/v1/admin/service-requests/{id}/assignment", requestId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"staffAccountId":"%s"}
+                        """.formatted(homeCareStaff.getId())))
+                .andExpect(status().isConflict());
         mockMvc.perform(get("/api/v1/partner/service-requests")
                 .param("type", "HOME_CARE")
                 .with(user("homecare-staff@mednet.test").roles("HOME_CARE")))

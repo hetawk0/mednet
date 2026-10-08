@@ -87,8 +87,9 @@ public class PatientServiceRequestService {
     public PatientServiceRequestDetails cancel(String email, String requestType, String requestId) {
         PlatformAccountEntity patient = careAccess.requirePatient(email);
         String type = normalizeType(requestType);
-        PatientServiceRequestEntity request = requests
-                .findByIdAndPatientAccountIdAndRequestType(requestId, patient.getId(), type)
+        PatientServiceRequestEntity request = requests.findByIdForUpdate(requestId)
+                .filter(value -> patient.getId().equals(value.getPatientAccountId())
+                        && type.equals(value.getRequestType()))
                 .orElseThrow(PatientServiceRequestService::notFound);
         if (!"OPEN".equals(request.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only an open service request can be cancelled");
@@ -110,7 +111,7 @@ public class PatientServiceRequestService {
 
     @Transactional
     public AdminRequestSummary updateStatus(String requestId, String status, String actorEmail) {
-        PatientServiceRequestEntity request = requests.findById(requestId)
+        PatientServiceRequestEntity request = requests.findByIdForUpdate(requestId)
                 .orElseThrow(PatientServiceRequestService::notFound);
         String next = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
         boolean valid = ("OPEN".equals(request.getStatus())
@@ -135,7 +136,7 @@ public class PatientServiceRequestService {
 
     @Transactional
     public PartnerAssignment assignStaff(String requestId, String staffAccountId, String actorEmail) {
-        PatientServiceRequestEntity request = requests.findById(requestId)
+        PatientServiceRequestEntity request = requests.findByIdForUpdate(requestId)
                 .orElseThrow(PatientServiceRequestService::notFound);
         PlatformAccountEntity staff = accounts.findById(staffAccountId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff account not found"));
@@ -175,10 +176,12 @@ public class PatientServiceRequestService {
 
     @Transactional
     public PartnerRequestDetails updateAssignedStatus(String email, String requestId, String status) {
-        PlatformAccountEntity staff = requirePartnerAccountForRequest(email, requestId);
-        PatientServiceRequestEntity request = requests.findByIdAndAssignedStaffAccountIdAndRequestType(
-                        requestId, staff.getId(), staff.getAccountType())
+        PatientServiceRequestEntity request = requests.findByIdForUpdate(requestId)
                 .orElseThrow(PatientServiceRequestService::notFound);
+        PlatformAccountEntity staff = requirePartnerAccount(email, request.getRequestType());
+        if (!staff.getId().equals(request.getAssignedStaffAccountId())) {
+            throw notFound();
+        }
         String next = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
         boolean starting = "OPEN".equals(request.getStatus()) && "IN_PROGRESS".equals(next);
         boolean completingHomeCare = "HOME_CARE".equals(staff.getAccountType())
@@ -210,12 +213,6 @@ public class PatientServiceRequestService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Partner account access is not allowed");
         }
         return account;
-    }
-
-    private PlatformAccountEntity requirePartnerAccountForRequest(String email, String requestId) {
-        PatientServiceRequestEntity request = requests.findById(requestId)
-                .orElseThrow(PatientServiceRequestService::notFound);
-        return requirePartnerAccount(email, request.getRequestType());
     }
 
     private static String normalizeType(String type) {
