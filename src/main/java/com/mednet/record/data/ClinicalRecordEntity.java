@@ -22,7 +22,7 @@ public class ClinicalRecordEntity {
     @Column(name = "author_account_id", nullable = false, length = 36)
     private String authorAccountId;
 
-    @Column(name = "provider_application_id", nullable = false, length = 36)
+    @Column(name = "provider_application_id", length = 36)
     private String providerApplicationId;
 
     @Column(nullable = false, length = 32)

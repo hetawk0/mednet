@@ -2,6 +2,7 @@ package com.mednet;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -38,6 +39,9 @@ import com.mednet.appointment.data.AppointmentRepository;
 import com.mednet.appointment.data.AppointmentEntity;
 import com.mednet.record.data.ClinicalRecordRepository;
 import com.mednet.record.data.PatientProviderRecordConsentRepository;
+import com.mednet.medication.app.MedicationService;
+import com.mednet.medication.data.MedicationScheduleEntity;
+import com.mednet.medication.data.MedicationScheduleRepository;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -54,6 +58,7 @@ import static org.mockito.Mockito.doAnswer;
 
 @SpringBootTest(properties = {
         "mednet.google.enabled=true",
+        "server.servlet.session.cookie.secure=false",
         "spring.datasource.url=jdbc:h2:mem:mednet;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa",
         "spring.datasource.password="
@@ -111,6 +116,12 @@ class MedNetApplicationTests {
 
     @Autowired
     private PatientProviderRecordConsentRepository recordConsents;
+
+    @Autowired
+    private MedicationScheduleRepository medicationSchedules;
+
+    @Autowired
+    private MedicationService medicationService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -316,7 +327,7 @@ class MedNetApplicationTests {
         String providerEmail = "appointment-provider-" + UUID.randomUUID() + "@mednet.test";
         String patientEmail = "appointment-patient-" + UUID.randomUUID() + "@mednet.test";
         PlatformAccountEntity providerAccount = new PlatformAccountEntity(
-                UUID.randomUUID().toString(), providerEmail, "PATIENT");
+                UUID.randomUUID().toString(), providerEmail, "PROVIDER");
         providerAccount.verifyEmail();
         accounts.save(providerAccount);
         PlatformAccountEntity patientAccount = new PlatformAccountEntity(
@@ -598,6 +609,320 @@ class MedNetApplicationTests {
                 .andExpect(status().isForbidden());
         assertThat(clinicalRecords.count()).isEqualTo(2);
         assertThat(recordConsents.count()).isEqualTo(1);
+    }
+
+    @Test
+    void guardedCareWorkflowsEnforceOwnershipAndCreatePrivateNotifications() throws Exception {
+        String patientEmail = "guarded-patient-" + UUID.randomUUID() + "@mednet.test";
+        String providerEmail = "guarded-provider-" + UUID.randomUUID() + "@mednet.test";
+        PlatformAccountEntity patient = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), patientEmail, "PATIENT");
+        patient.verifyEmail();
+        accounts.save(patient);
+        PlatformAccountEntity providerAccount = new PlatformAccountEntity(
+                UUID.randomUUID().toString(), providerEmail, "PROVIDER");
+        providerAccount.verifyEmail();
+        accounts.save(providerAccount);
+
+        ProviderApplicationEntity provider = new ProviderApplicationEntity(
+                UUID.randomUUID().toString(), "Guarded Provider", providerEmail, "Family Medicine", "LIC-GUARD-1");
+        provider.review("APPROVED", ADMIN_EMAIL);
+        providerApplications.save(provider);
+        ProviderAvailabilitySlotEntity slot = availabilitySlots.save(new ProviderAvailabilitySlotEntity(
+                UUID.randomUUID().toString(),
+                provider.getId(),
+                Instant.now().plusSeconds(7200),
+                Instant.now().plusSeconds(9000)));
+        AppointmentEntity appointment = new AppointmentEntity(
+                UUID.randomUUID().toString(), patient.getId(), provider.getId(), slot.getId());
+        appointment.confirm();
+        appointments.save(appointment);
+
+        MvcResult conversationResult = mockMvc.perform(post("/api/v1/conversations")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"providerId\":\"" + provider.getId() + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String conversationId = objectMapper.readTree(conversationResult.getResponse().getContentAsString())
+                .get("id").asText();
+
+        mockMvc.perform(post("/api/v1/conversations/{id}/messages", conversationId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"body\":\"Please contact me about my follow-up.\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Please contact me about my follow-up."));
+
+        mockMvc.perform(get("/api/v1/conversations/{id}/messages", conversationId)
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+
+        String unrelatedPatient = "unrelated-" + UUID.randomUUID() + "@mednet.test";
+        accounts.save(new PlatformAccountEntity(UUID.randomUUID().toString(), unrelatedPatient, "PATIENT"));
+        mockMvc.perform(get("/api/v1/conversations/{id}/messages", conversationId)
+                .with(user(unrelatedPatient).roles("PATIENT")))
+                .andExpect(status().isNotFound());
+
+        MvcResult providerNotificationResult = mockMvc.perform(get("/api/v1/notifications")
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].title").value("You have a new message"))
+                .andReturn();
+        String providerNotificationId = objectMapper.readTree(
+                providerNotificationResult.getResponse().getContentAsString())
+                .get("content").get(0).get("id").asText();
+        mockMvc.perform(patch("/api/v1/notifications/{id}/read", providerNotificationId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf()))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/v1/patients/{patientId}/vitals", patient.getId())
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/patients/me/record-consents")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"providerId\":\"" + provider.getId() + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/patients/me/vitals")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"metric":"temperature","value":37.1,"unit":"C","recordedAt":"%s"}
+                        """.formatted(Instant.now().minusSeconds(10))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.source").value("PATIENT_REPORTED"));
+        mockMvc.perform(get("/api/v1/patients/{patientId}/vitals", patient.getId())
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].metric").value("temperature"));
+        mockMvc.perform(get("/api/v1/patients/me/records")
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].category").value("VITAL"))
+                .andExpect(jsonPath("$.content[0].authorName").value("Patient"));
+
+        LocalDate startDate = LocalDate.now(ZoneId.of("Africa/Monrovia"));
+        MvcResult medicationResult = mockMvc.perform(post("/api/v1/patients/me/medications")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "medicationName":"Patient-entered medicine",
+                          "dose":"1 tablet",
+                          "reminderTime":"09:00:00",
+                          "timeZone":"Africa/Monrovia",
+                          "startDate":"%s",
+                          "endDate":null
+                        }
+                        """.formatted(startDate)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.timeZone").value("Africa/Monrovia"))
+                .andReturn();
+        String medicationId = objectMapper.readTree(medicationResult.getResponse().getContentAsString())
+                .get("id").asText();
+        mockMvc.perform(post("/api/v1/patients/me/medications/{id}/dose-logs", medicationId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/patients/me/medications/{id}/dose-logs", medicationId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/patients/me/medications/{id}/dose-logs", medicationId)
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].doseDate").exists());
+
+        MedicationScheduleEntity scheduled = medicationSchedules.findById(medicationId).orElseThrow();
+        scheduled.update(
+                scheduled.getMedicationName(),
+                scheduled.getDose(),
+                scheduled.getReminderTime(),
+                scheduled.getTimeZone(),
+                scheduled.getStartDate(),
+                scheduled.getEndDate(),
+                Instant.now().minusSeconds(30));
+        medicationSchedules.saveAndFlush(scheduled);
+        medicationService.createDueReminders();
+        medicationService.createDueReminders();
+        mockMvc.perform(get("/api/v1/notifications")
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].title").value("A medication reminder is due"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+        mockMvc.perform(patch("/api/v1/patients/me/medications/{id}/stop", medicationId)
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("STOPPED"));
+
+        MvcResult homeCareResult = mockMvc.perform(post("/api/v1/home-care-requests")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"serviceDescription":"Nursing visit","locationDescription":"Monrovia, Sinkor"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andReturn();
+        String requestId = objectMapper.readTree(homeCareResult.getResponse().getContentAsString())
+                .get("id").asText();
+        MvcResult homeCareAccountResult = mockMvc.perform(post("/api/v1/admin/accounts")
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"homecare-staff@mednet.test","accountType":"HOME_CARE"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountType").value("HOME_CARE"))
+                .andReturn();
+        String homeCareStaffId = objectMapper.readTree(homeCareAccountResult.getResponse().getContentAsString())
+                .get("id").asText();
+        mockMvc.perform(post("/api/v1/auth/register")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"homecare-staff@mednet.test","password":"HomeCare-Secure-Password-2026"}
+                        """))
+                .andExpect(status().isAccepted());
+        PlatformAccountEntity homeCareStaff = accounts.findById(homeCareStaffId).orElseThrow();
+        homeCareStaff.verifyEmail();
+        homeCareStaff.setPasswordHash(passwordEncoder.encode("HomeCare-Secure-Password-2026"));
+        accounts.saveAndFlush(homeCareStaff);
+        assertThat(userDetailsService.loadUserByUsername("homecare-staff@mednet.test").getAuthorities())
+                .extracting("authority")
+                .containsExactly("ROLE_HOME_CARE");
+        mockMvc.perform(get("/api/v1/admin/service-requests")
+                .param("type", "HOME_CARE")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(requestId))
+                .andExpect(jsonPath("$[0].requestedService").doesNotExist());
+        mockMvc.perform(patch("/api/v1/admin/service-requests/{id}/assignment", requestId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"staffAccountId":"%s"}
+                        """.formatted(homeCareStaff.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assignedStaffAccountId").value(homeCareStaff.getId()));
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                .param("type", "HOME_CARE")
+                .with(user("homecare-staff@mednet.test").roles("HOME_CARE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(requestId))
+                .andExpect(jsonPath("$[0].requestedService").value("Nursing visit"))
+                .andExpect(jsonPath("$[0].locationDescription").value("Monrovia, Sinkor"))
+                .andExpect(jsonPath("$[0].patientAccountId").doesNotExist());
+        mockMvc.perform(patch("/api/v1/admin/service-requests/{id}/status", requestId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"RESOLVED\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(patch("/api/v1/partner/service-requests/{id}/status", requestId)
+                .with(user("homecare-staff@mednet.test").roles("HOME_CARE"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"IN_PROGRESS\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+        mockMvc.perform(patch("/api/v1/partner/service-requests/{id}/status", requestId)
+                .with(user("homecare-staff@mednet.test").roles("HOME_CARE"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"RESOLVED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESOLVED"));
+        mockMvc.perform(get("/api/v1/home-care-requests")
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("RESOLVED"));
+
+        MvcResult labResult = mockMvc.perform(post("/api/v1/lab-requests")
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"testDescription\":\"Complete blood count\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andReturn();
+        String labRequestId = objectMapper.readTree(labResult.getResponse().getContentAsString())
+                .get("id").asText();
+        MvcResult labAccountResult = mockMvc.perform(post("/api/v1/admin/accounts")
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"lab-staff@mednet.test","accountType":"LABORATORY"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountType").value("LABORATORY"))
+                .andReturn();
+        String labStaffId = objectMapper.readTree(labAccountResult.getResponse().getContentAsString())
+                .get("id").asText();
+        PlatformAccountEntity labStaff = accounts.findById(labStaffId).orElseThrow();
+        labStaff.verifyEmail();
+        labStaff.setPasswordHash(passwordEncoder.encode("Laboratory-Secure-Password-2026"));
+        accounts.saveAndFlush(labStaff);
+        assertThat(userDetailsService.loadUserByUsername("lab-staff@mednet.test").getAuthorities())
+                .extracting("authority")
+                .containsExactly("ROLE_LABORATORY");
+        mockMvc.perform(get("/api/v1/admin/service-requests")
+                .param("type", "LABORATORY")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(labRequestId))
+                .andExpect(jsonPath("$[0].requestedService").doesNotExist());
+        mockMvc.perform(patch("/api/v1/admin/service-requests/{id}/assignment", labRequestId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"staffAccountId":"%s"}
+                        """.formatted(labStaff.getId())))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                .param("type", "LABORATORY")
+                .with(user("lab-staff@mednet.test").roles("LABORATORY")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(labRequestId))
+                .andExpect(jsonPath("$[0].requestedService").value("Complete blood count"));
+        mockMvc.perform(patch("/api/v1/partner/service-requests/{id}/status", labRequestId)
+                .with(user("lab-staff@mednet.test").roles("LABORATORY"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"IN_PROGRESS\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+        mockMvc.perform(patch("/api/v1/partner/service-requests/{id}/status", labRequestId)
+                .with(user("lab-staff@mednet.test").roles("LABORATORY"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"RESOLVED\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                .param("type", "HOME_CARE")
+                .with(user("lab-staff@mednet.test").roles("LABORATORY")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/overview")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.counts.openHomeCareRequests").isNumber())
+                .andExpect(jsonPath("$.counts.openLaboratoryRequests").isNumber());
     }
 
     @Test

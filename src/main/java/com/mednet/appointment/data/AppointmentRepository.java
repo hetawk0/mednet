@@ -27,4 +27,8 @@ public interface AppointmentRepository extends JpaRepository<AppointmentEntity, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<AppointmentEntity> findFirstByPatientAccountIdAndProviderApplicationIdAndStatusInOrderByCreatedAtDesc(
             String patientAccountId, String providerApplicationId, Collection<String> statuses);
+
+    boolean existsByPatientAccountId(String patientAccountId);
+
+    boolean existsByProviderApplicationId(String providerApplicationId);
 }

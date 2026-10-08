@@ -51,6 +51,8 @@ public final class AdminWorkflowModels {
     public record AdminCounts(
             long pendingProviders,
             long activeAccounts,
-            long openRequests) {
+            long openRequests,
+            long openHomeCareRequests,
+            long openLaboratoryRequests) {
     }
 }

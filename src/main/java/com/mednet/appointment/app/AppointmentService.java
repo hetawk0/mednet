@@ -17,6 +17,8 @@ import com.mednet.admin.data.AdminAuditEventEntity;
 import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
+import com.mednet.notification.app.NotificationService;
+import com.mednet.patient.app.PatientCareAccess;
 import com.mednet.appointment.data.AppointmentEntity;
 import com.mednet.appointment.data.AppointmentRepository;
 import com.mednet.patient.data.PatientProfileEntity;
@@ -36,6 +38,8 @@ public class AppointmentService {
     private final ProviderAvailabilitySlotRepository slots;
     private final AppointmentRepository appointments;
     private final AdminAuditEventRepository auditEvents;
+    private final NotificationService notifications;
+    private final PatientCareAccess careAccess;
 
     public AppointmentService(
             PlatformAccountRepository accounts,
@@ -43,13 +47,17 @@ public class AppointmentService {
             ProviderApplicationRepository providers,
             ProviderAvailabilitySlotRepository slots,
             AppointmentRepository appointments,
-            AdminAuditEventRepository auditEvents) {
+            AdminAuditEventRepository auditEvents,
+            NotificationService notifications,
+            PatientCareAccess careAccess) {
         this.accounts = accounts;
         this.patientProfiles = patientProfiles;
         this.providers = providers;
         this.slots = slots;
         this.appointments = appointments;
         this.auditEvents = auditEvents;
+        this.notifications = notifications;
+        this.careAccess = careAccess;
     }
 
     @Transactional
@@ -79,6 +87,8 @@ public class AppointmentService {
                 provider.getId(),
                 lockedSlot.getId()));
         audit(patientEmail, "appointment.requested", appointment.getId());
+        String providerAccountId = careAccess.requireActiveProviderAccount(provider.getEmail()).getId();
+        notify(providerAccountId, appointment.getId(), "A patient requested an appointment");
         return details(appointment);
     }
 
@@ -197,7 +207,21 @@ public class AppointmentService {
 
         AppointmentEntity saved = appointments.save(appointment);
         audit(actorEmail, "appointment." + normalizedAction.toLowerCase(Locale.ROOT), saved.getId());
+        String recipientAccountId = "PATIENT".equals(role)
+                ? careAccess.requireActiveProviderAccount(provider.getEmail()).getId()
+                : saved.getPatientAccountId();
+        notify(recipientAccountId, saved.getId(), "Your appointment status was updated");
         return details(saved);
+    }
+
+    private void notify(String recipientAccountId, String appointmentId, String title) {
+        notifications.create(
+                recipientAccountId,
+                "appointment:" + appointmentId + ":" + UUID.randomUUID(),
+                "APPOINTMENT",
+                title,
+                "appointment",
+                appointmentId);
     }
 
     private PlatformAccountEntity patient(String email) {

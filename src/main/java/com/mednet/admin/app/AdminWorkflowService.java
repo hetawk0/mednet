@@ -26,18 +26,26 @@ import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.admin.data.ServiceRequestEntity;
 import com.mednet.admin.data.ServiceRequestRepository;
+import com.mednet.appointment.data.AppointmentRepository;
+import com.mednet.message.data.ConversationRepository;
+import com.mednet.medication.data.MedicationScheduleRepository;
+import com.mednet.patient.data.PatientProfileRepository;
 import com.mednet.provider.data.ProviderApplicationEntity;
 import com.mednet.provider.data.ProviderApplicationRepository;
 import com.mednet.record.data.ClinicalRecordRepository;
 import com.mednet.record.data.PatientProviderRecordConsentRepository;
+import com.mednet.service.data.PatientServiceRequestRepository;
+import com.mednet.vital.data.PatientVitalRepository;
 
 @Service
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url")
 public class AdminWorkflowService {
 
     private static final Set<String> PROVIDER_STATUSES = Set.of("PENDING", "APPROVED", "REJECTED", "SUSPENDED");
-    private static final Set<String> ACCOUNT_TYPES = Set.of("PATIENT", "PROVIDER", "ADMIN", "SUPER_ADMIN");
-    private static final Set<String> CREATABLE_ACCOUNT_TYPES = Set.of("PATIENT", "PROVIDER");
+    private static final Set<String> ACCOUNT_TYPES =
+            Set.of("PATIENT", "PROVIDER", "ADMIN", "SUPER_ADMIN", "LABORATORY", "HOME_CARE");
+    private static final Set<String> CREATABLE_ACCOUNT_TYPES =
+            Set.of("PATIENT", "PROVIDER", "LABORATORY", "HOME_CARE");
     private static final Set<String> ACCOUNT_STATUSES = Set.of("ACTIVE", "SUSPENDED");
     private static final Set<String> REQUEST_TYPES = Set.of("APPOINTMENT", "HOME_CARE", "LABORATORY");
     private static final Set<String> REQUEST_STATUSES = Set.of("OPEN", "IN_PROGRESS", "RESOLVED", "CANCELLED");
@@ -48,6 +56,12 @@ public class AdminWorkflowService {
     private final AdminAuditEventRepository auditEvents;
     private final ClinicalRecordRepository clinicalRecords;
     private final PatientProviderRecordConsentRepository recordConsents;
+    private final PatientProfileRepository patientProfiles;
+    private final AppointmentRepository appointments;
+    private final ConversationRepository conversations;
+    private final MedicationScheduleRepository medicationSchedules;
+    private final PatientVitalRepository patientVitals;
+    private final PatientServiceRequestRepository patientServiceRequests;
 
     public AdminWorkflowService(
             ProviderApplicationRepository providers,
@@ -55,13 +69,25 @@ public class AdminWorkflowService {
             ServiceRequestRepository requests,
             AdminAuditEventRepository auditEvents,
             ClinicalRecordRepository clinicalRecords,
-            PatientProviderRecordConsentRepository recordConsents) {
+            PatientProviderRecordConsentRepository recordConsents,
+            PatientProfileRepository patientProfiles,
+            AppointmentRepository appointments,
+            ConversationRepository conversations,
+            MedicationScheduleRepository medicationSchedules,
+            PatientVitalRepository patientVitals,
+            PatientServiceRequestRepository patientServiceRequests) {
         this.providers = providers;
         this.accounts = accounts;
         this.requests = requests;
         this.auditEvents = auditEvents;
         this.clinicalRecords = clinicalRecords;
         this.recordConsents = recordConsents;
+        this.patientProfiles = patientProfiles;
+        this.appointments = appointments;
+        this.conversations = conversations;
+        this.medicationSchedules = medicationSchedules;
+        this.patientVitals = patientVitals;
+        this.patientServiceRequests = patientServiceRequests;
     }
 
     @Transactional(readOnly = true)
@@ -141,10 +167,10 @@ public class AdminWorkflowService {
     public PlatformAccount changeAccountType(String id, String accountType, String actor) {
         PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
         String nextType = requireStatus(accountType, ACCOUNT_TYPES);
-        if (hasClinicalAccountData(entity)) {
+        if (hasProtectedAccountData(entity)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Accounts linked to medical records or record consent cannot change account type");
+                    "Accounts linked to profiles, care workflows, provider applications, or clinical records cannot change account type");
         }
         entity.changeAccountType(nextType);
         audit(actor, "account.role_changed", "account", id);
@@ -154,24 +180,29 @@ public class AdminWorkflowService {
     @Transactional
     public void deleteAccount(String id, String actor) {
         PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
-        if (hasClinicalAccountData(entity)) {
+        if (hasProtectedAccountData(entity)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Accounts linked to medical records or record consent cannot be deleted");
+                    "Accounts linked to profiles, care workflows, provider applications, or clinical records cannot be deleted");
         }
         accounts.delete(entity);
         audit(actor, "account.deleted", "account", id);
     }
 
-    private boolean hasClinicalAccountData(PlatformAccountEntity account) {
-        if (clinicalRecords.existsByPatientAccountIdOrAuthorAccountId(account.getId(), account.getId())
-                || recordConsents.existsByPatientAccountId(account.getId())) {
+    private boolean hasProtectedAccountData(PlatformAccountEntity account) {
+        if (providers.findFirstByEmailIgnoreCaseOrderByCreatedAtDesc(account.getEmail()).isPresent()) {
             return true;
         }
-        if ("PROVIDER".equals(account.getAccountType())) {
-            return providers.findFirstByEmailIgnoreCaseOrderByCreatedAtDesc(account.getEmail())
-                    .map(provider -> recordConsents.existsByProviderApplicationId(provider.getId()))
-                    .orElse(false);
+        if (clinicalRecords.existsByPatientAccountIdOrAuthorAccountId(account.getId(), account.getId())
+                || recordConsents.existsByPatientAccountId(account.getId())
+                || patientProfiles.existsByAccountId(account.getId())
+                || appointments.existsByPatientAccountId(account.getId())
+                || conversations.existsByPatientAccountId(account.getId())
+                || medicationSchedules.existsByPatientAccountId(account.getId())
+                || patientVitals.existsByPatientAccountId(account.getId())
+                || patientServiceRequests.existsByPatientAccountId(account.getId())
+                || patientServiceRequests.existsByAssignedStaffAccountId(account.getId())) {
+            return true;
         }
         return false;
     }
@@ -214,10 +245,15 @@ public class AdminWorkflowService {
 
     @Transactional(readOnly = true)
     public AdminCounts counts() {
+        List<String> openStatuses = List.of("OPEN", "IN_PROGRESS");
+        long openHomeCare = patientServiceRequests.countByRequestTypeAndStatusIn("HOME_CARE", openStatuses);
+        long openLaboratory = patientServiceRequests.countByRequestTypeAndStatusIn("LABORATORY", openStatuses);
         return new AdminCounts(
                 providers.countByStatus("PENDING"),
                 accounts.countByStatus("ACTIVE"),
-                requests.countByStatusIn(List.of("OPEN", "IN_PROGRESS")));
+                requests.countByStatusIn(openStatuses) + openHomeCare + openLaboratory,
+                openHomeCare,
+                openLaboratory);
     }
 
     private void audit(String actor, String action, String resourceType, String resourceId) {

@@ -155,6 +155,7 @@ The current API preserves its established success response bodies for frontend c
 | Vitals       | `/api/v1/patients/{id}/vitals`                                                |
 | Home Care    | `/api/v1/home-care-requests`                                                  |
 | Lab          | `/api/v1/lab-requests`, `/api/v1/lab-results/{id}`                            |
+| Partner work | `/api/v1/partner/service-requests` (assigned `HOME_CARE` / `LABORATORY` work) |
 | Notification | `/api/v1/notifications`, `/api/v1/notifications/{id}/read`                    |
 | Admin        | `/api/v1/admin/dashboard`, `/api/v1/admin/providers/pending`                  |
 
@@ -171,7 +172,18 @@ or no-show fields while their product decisions remain open.
 - The supported categories are encounter summaries, diagnoses, prescriptions, allergies, medical history, and document references. Entries show their provider author and effective/recorded timestamps. Corrections are additional entries linked with `amendsRecordId`; there is no update or delete endpoint.
 - Record reads and writes, and consent grants/revocations, create audit metadata without storing clinical summaries in the audit trail. Administrators cannot access clinical payloads through admin APIs. Account role changes/deletion are blocked when an account is linked to clinical records or patient consent.
 - `DOCUMENT` currently represents a provider-authored document reference/summary only. Binary upload/download and patient-supplied historical files are not enabled: the deployment has no configured private object storage, malware scanning, or retention policy. Do not use public URLs or local application storage as a workaround; resolve OQ-25 and configure private storage before enabling file transfer.
-- The implementation uses a small MedNet clinical-entry model, not a claim of full FHIR conformance. Clinical codes are optional references and are not validated against a terminology server. Entries from consultations, medications, vitals and laboratories will be connected as those modules are implemented.
+- Patient-entered medication schedules and self-reported vitals are also appended to the record timeline as patient-authored entries. The implementation uses a small MedNet clinical-entry model, not a claim of full FHIR conformance. Clinical codes are optional references and are not validated against a terminology server. Consultation and laboratory-result entries remain gated until their workflows are approved.
+
+### Other candidate workflows (guarded MVP)
+
+- Text-only conversations are available only between a patient and an approved provider with a confirmed, completed, or actively rescheduled appointment relationship. Conversation history is retained; attachments, emergency handling, service-level commitments, and messaging outside that care relationship remain disabled pending OQ-17–OQ-19 and OQ-49.
+- Patients may enter free-text medication names and doses with one daily reminder time and an IANA time zone. Reminders are in-app only. This is not prescribing: provider-created schedules, drug catalogue lookup, interaction checking, and provider adherence reporting are disabled pending OQ-28–OQ-31.
+- Patients may enter manually reported vital metrics, numeric values and units. The value is labeled patient-reported and added to the record timeline. Providers need the existing care relationship and explicit record consent to read them. The backend does not infer a clinical metric list, range, or alert threshold; resolve OQ-32–OQ-34 before clinical alerting or device integration.
+- In-app notifications are available with generic, non-clinical titles. Appointment changes, messages, service-request changes, and medication reminders create notifications. SMS, email, push delivery, and notification preferences are not enabled pending OQ-43–OQ-45.
+- Patients can submit and track home-care and laboratory requests, and cancel them while open. Administrators can see opaque request IDs and statuses and move unassigned requests into progress or cancel them; request details are not exposed in the admin API. External routing, home-care scheduling, laboratory result entry/review, and laboratory completion remain disabled pending OQ-35–OQ-42 and the no-admin-clinical-payload policy.
+- Following the user-approved OQ-02 decision, administrators can provision individual `HOME_CARE` and `LABORATORY` accounts and assign matching open requests to verified staff. Staff can list only requests assigned to their account, see only the service description and (for home care) location needed for the task, and update status within role-specific transitions. Home-care staff may mark an in-progress request resolved; laboratory staff cannot resolve requests until result entry and review are implemented. This is manual assignment, not external routing or facility organization management.
+- Virtual consultations are not enabled because there is no approved consultation mode, external real-time service, recording/retention policy, or connection-failure workflow (OQ-20–OQ-23).
+- The admin overview includes active/open request counts and indicates partial or disabled modules; it does not expose clinical payloads.
 
 ---
 

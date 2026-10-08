@@ -19,6 +19,8 @@ public interface ProviderAvailabilitySlotRepository extends JpaRepository<Provid
     @Query("select slot from ProviderAvailabilitySlotEntity slot where slot.id = :id")
     Optional<ProviderAvailabilitySlotEntity> findByIdForUpdate(@Param("id") String id);
 
+    boolean existsByProviderApplicationId(String providerApplicationId);
+
     boolean existsByProviderApplicationIdAndStatusNotAndStartsAtLessThanAndEndsAtGreaterThan(
             String providerApplicationId, String excludedStatus, Instant endsAt, Instant startsAt);
 

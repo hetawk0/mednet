@@ -223,7 +223,8 @@ public class PatientRecordService {
 
     private PlatformAccountEntity requireActiveProviderAccount(String email) {
         return accounts.findFirstByEmailIgnoreCase(email)
-                .filter(account -> "PROVIDER".equals(account.getAccountType())
+                .filter(account -> ("PROVIDER".equals(account.getAccountType())
+                        || "PATIENT".equals(account.getAccountType()))
                         && "ACTIVE".equals(account.getStatus()))
                 .orElseThrow(PatientRecordService::notFound);
     }
@@ -238,8 +239,11 @@ public class PatientRecordService {
     }
 
     private RecordDetails toRecordDetails(ClinicalRecordEntity record) {
-        ProviderApplicationEntity provider = providers.findById(record.getProviderApplicationId())
-                .orElseThrow(PatientRecordService::notFound);
+        String authorName = record.getProviderApplicationId() == null
+                ? "Patient"
+                : providers.findById(record.getProviderApplicationId())
+                        .orElseThrow(PatientRecordService::notFound)
+                        .getDisplayName();
         return new RecordDetails(
                 record.getId(),
                 record.getCategory(),
@@ -249,7 +253,7 @@ public class PatientRecordService {
                 record.getEffectiveAt(),
                 record.getCreatedAt(),
                 record.getAmendsRecordId(),
-                provider.getDisplayName());
+                authorName);
     }
 
     private static RecordConsent toConsent(
