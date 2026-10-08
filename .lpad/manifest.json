@@ -24,7 +24,9 @@
         "runtime": "java",
         "routes": [
           "/api/",
-          "/actuator/"
+          "/actuator/",
+          "/api-docs",
+          "/swagger-ui"
         ],
         "healthCheckPath": "/actuator/health"
       },
