@@ -17,6 +17,7 @@ public class EkdSendEmailService {
     private static final Logger log = LoggerFactory.getLogger(EkdSendEmailService.class);
     private static final String DEFAULT_API_URL = "https://es.ekddigital.com/api/v1";
     private static final String DEFAULT_FROM = "support@ekddigital.com";
+    private static final String DEFAULT_USER_AGENT = "MedNet/1.0";
     private final RestClient client;
     private final String apiKey;
     private final String from;
@@ -39,10 +40,11 @@ public class EkdSendEmailService {
             return false;
         }
         try {
-            client.post()
+            EkdSendResponse response = client.post()
                     .uri("/send")
                     .header("x-api-key", apiKey)
                     .header("Authorization", "Bearer " + apiKey)
+                    .header("User-Agent", DEFAULT_USER_AGENT)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of(
                             "type", "email",
@@ -53,7 +55,11 @@ public class EkdSendEmailService {
                             "body", html,
                             "text", text))
                     .retrieve()
-                    .toBodilessEntity();
+                    .body(EkdSendResponse.class);
+            if (response != null && Boolean.FALSE.equals(response.success())) {
+                log.warn("EKDSend did not accept the email request");
+                return false;
+            }
             return true;
         } catch (RestClientResponseException exception) {
             log.warn("EKDSend rejected an email request with HTTP {}", exception.getStatusCode().value());
@@ -62,5 +68,8 @@ public class EkdSendEmailService {
             log.warn("EKDSend email request failed ({})", exception.getClass().getSimpleName());
             return false;
         }
+    }
+
+    private record EkdSendResponse(Boolean success, String messageId, String id, String status) {
     }
 }

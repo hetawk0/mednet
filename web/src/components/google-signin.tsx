@@ -53,10 +53,13 @@ async function responseError(response: Response, fallback: string) {
 export function GoogleSignIn({ googleError }: { googleError: boolean }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [mode, setMode] = useState<
+    "login" | "register" | "forgot" | "resend"
+  >("login");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [emailInput, setEmailInput] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -172,8 +175,34 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
           );
         const result = (await response.json()) as { message?: string };
         setMessage(
-          `${result.message ?? "Verification instructions have been sent."} Check your inbox and spam folder. If needed, choose Create account and submit these details again to request a fresh link.`,
+          result.message ??
+            "If this email is eligible for a new MedNet account, a verification link will arrive shortly.",
         );
+        setEmailInput(email);
+        setMode("login");
+      } else if (mode === "resend") {
+        const response = await fetch("/api/v1/auth/resend-verification", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            [csrf.headerName]: csrf.token,
+          },
+          body: JSON.stringify({ email }),
+        });
+        if (!response.ok)
+          throw new Error(
+            await responseError(
+              response,
+              "We could not process your request. Please try again shortly.",
+            ),
+          );
+        const result = (await response.json()) as { message?: string };
+        setMessage(
+          result.message ??
+            "If an account with this email needs verification, we will send a new verification link shortly.",
+        );
+        setEmailInput(email);
         setMode("login");
       } else {
         const response = await fetch("/api/v1/auth/forgot-password", {
@@ -265,13 +294,32 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
               Create account
             </button>
           </div>
-          <button
-            className="admin-auth-recovery"
-            type="button"
-            onClick={() => setMode(mode === "forgot" ? "login" : "forgot")}
-          >
-            {mode === "forgot" ? "Back to sign in" : "Forgot password?"}
-          </button>
+          <div className="admin-auth-actions">
+            <button
+              className="admin-auth-recovery"
+              type="button"
+              onClick={() => {
+                setError("");
+                setMessage("");
+                setMode(mode === "forgot" ? "login" : "forgot");
+              }}
+            >
+              {mode === "forgot" ? "Back to sign in" : "Forgot password?"}
+            </button>
+            <button
+              className="admin-auth-recovery"
+              type="button"
+              onClick={() => {
+                setError("");
+                setMessage("");
+                setMode(mode === "resend" ? "login" : "resend");
+              }}
+            >
+              {mode === "resend"
+                ? "Back to sign in"
+                : "Resend verification email"}
+            </button>
+          </div>
           <form className="admin-account-form" onSubmit={submit}>
             <label htmlFor="account-email">Email address</label>
             <input
@@ -279,9 +327,11 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
               name="email"
               type="email"
               autoComplete="email"
+              value={emailInput}
+              onChange={(event) => setEmailInput(event.target.value)}
               required
             />
-            {mode !== "forgot" && (
+            {(mode === "login" || mode === "register") && (
               <PasswordInput
                 id="account-password"
                 name="password"
@@ -309,7 +359,9 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
                   ? "Sign in"
                   : mode === "register"
                     ? "Create account"
-                    : "Send recovery email"}
+                    : mode === "forgot"
+                      ? "Send recovery email"
+                      : "Resend verification email"}
             </button>
           </form>
           <span className="admin-data-label">Other sign-in options</span>

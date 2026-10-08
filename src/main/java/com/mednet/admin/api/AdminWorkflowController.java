@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -72,7 +73,7 @@ public class AdminWorkflowController {
     public Page<PlatformAccount> accounts(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
-            @RequestParam(required = false) String search,
+            @RequestParam(required = false) @Size(max = 254) String search,
             @RequestParam(required = false) String status) {
         return service.accounts(page, size, search, status);
     }

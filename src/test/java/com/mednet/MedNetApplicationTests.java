@@ -1168,6 +1168,37 @@ class MedNetApplicationTests {
                         """))
                 .andExpect(status().isBadRequest());
 
+        mockMvc.perform(post("/api/v1/auth/register")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"long-password@mednet.test","password":"1234567890123456789012345678901234567890123456789012345678901234567890123"}
+                        """))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(java.util.Map.of(
+                        "email", "unicode-password@mednet.test",
+                        "password", "🔐".repeat(24)))))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/auth/verify")
+                .param("email", "not-an-email")
+                .param("token", "x".repeat(43)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/auth/verify")
+                .param("email", "person@mednet.test")
+                .param("token", "short"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/admin/accounts")
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .param("search", "a".repeat(255)))
+                .andExpect(status().isBadRequest());
+
         mockMvc.perform(post("/api/v1/auth/forgot-password")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)

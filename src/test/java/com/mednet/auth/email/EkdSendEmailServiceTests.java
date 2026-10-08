@@ -19,6 +19,8 @@ class EkdSendEmailServiceTests {
     private final AtomicReference<String> apiKeyHeader = new AtomicReference<>();
     private final AtomicReference<String> authorizationHeader = new AtomicReference<>();
     private final AtomicReference<Integer> responseStatus = new AtomicReference<>(200);
+    private final AtomicReference<String> responseBody =
+            new AtomicReference<>("{\"success\":true,\"messageId\":\"test-message\"}");
 
     @BeforeEach
     void startServer() throws IOException {
@@ -27,8 +29,8 @@ class EkdSendEmailServiceTests {
             requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             apiKeyHeader.set(exchange.getRequestHeaders().getFirst("x-api-key"));
             authorizationHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
-            byte[] body = "{\"success\":true,\"messageId\":\"test-message\"}"
-                    .getBytes(StandardCharsets.UTF_8);
+            byte[] body = responseBody.get().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(responseStatus.get(), body.length);
             exchange.getResponseBody().write(body);
             exchange.close();
@@ -72,6 +74,15 @@ class EkdSendEmailServiceTests {
     @Test
     void reportsProviderRejectionAsDeliveryFailure() {
         responseStatus.set(401);
+        EkdSendEmailService service = service("configured@example.test");
+
+        assertThat(service.send("patient@example.test", "subject", "<p>hello</p>", "hello"))
+                .isFalse();
+    }
+
+    @Test
+    void reportsProviderApplicationFailureEvenWhenHttpStatusIsSuccessful() {
+        responseBody.set("{\"success\":false,\"message\":\"sender rejected\"}");
         EkdSendEmailService service = service("configured@example.test");
 
         assertThat(service.send("patient@example.test", "subject", "<p>hello</p>", "hello"))

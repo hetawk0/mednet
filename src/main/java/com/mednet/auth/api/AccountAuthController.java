@@ -67,13 +67,13 @@ public class AccountAuthController {
             account = new PlatformAccountEntity(UUID.randomUUID().toString(), normalizedEmail,
                     requestedAccountType(request.accountType()));
         } else if (account.isEmailVerified()) {
-            return ResponseEntity.status(HttpStatus.ACCEPTED).body(genericResponse());
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(registrationResponse());
         }
         account.setPasswordHash(passwordEncoder.encode(request.password()));
         if (!sendVerification(account)) {
             return verificationDeliveryFailure();
         }
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(genericResponse());
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(registrationResponse());
     }
 
     @PostMapping("/resend-verification")
@@ -84,12 +84,14 @@ public class AccountAuthController {
                 return verificationDeliveryFailure();
             }
         }
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(genericResponse());
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(resendVerificationResponse());
     }
 
     @GetMapping("/verify")
     @Transactional
-    public MessageResponse verify(@RequestParam String email, @RequestParam String token) {
+    public MessageResponse verify(
+            @RequestParam @NotBlank @Email @Size(max = 254) String email,
+            @RequestParam @NotBlank @Size(min = 43, max = 43) @Pattern(regexp = "[A-Za-z0-9_-]{43}") String token) {
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(email)).orElseThrow(
                 () -> new AuthRequestException("Verification link is invalid or expired"));
         if (account.getVerificationTokenHash() == null
@@ -202,8 +204,10 @@ public class AccountAuthController {
     }
 
     private static void validatePassword(String password) {
-        if (password == null || password.length() < 12) {
-            throw new AuthRequestException("Password must be at least 12 characters");
+        if (password == null
+                || password.length() < 12
+                || password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new AuthRequestException("Password must be at least 12 characters and no more than 72 UTF-8 bytes");
         }
     }
 
@@ -212,7 +216,18 @@ public class AccountAuthController {
     }
 
     private static MessageResponse genericResponse() {
-        return new MessageResponse("If the account can receive this message, instructions have been sent.");
+        return new MessageResponse(
+                "If an account exists for this email, password reset instructions will arrive shortly.");
+    }
+
+    private static MessageResponse registrationResponse() {
+        return new MessageResponse(
+                "Thanks for signing up. If this email is eligible for a new MedNet account, a verification link will arrive shortly. Already registered? Sign in or reset your password.");
+    }
+
+    private static MessageResponse resendVerificationResponse() {
+        return new MessageResponse(
+                "If an account with this email needs verification, we will send a new verification link shortly.");
     }
 
     private static ResponseEntity<MessageResponse> verificationDeliveryFailure() {
@@ -227,7 +242,7 @@ public class AccountAuthController {
 
     public record CredentialsRequest(
             @NotBlank @Email @Size(max = 254) String email,
-            @NotBlank @Size(min = 12) String password,
+            @NotBlank @Size(min = 12, max = 72) String password,
             @Size(max = 16) String accountType) {
     }
 
@@ -245,7 +260,7 @@ public class AccountAuthController {
     public record ResetPasswordRequest(
             @NotBlank @Email @Size(max = 254) String email,
             @NotBlank @Size(max = 128) String token,
-            @NotBlank @Size(min = 12) String password) {
+            @NotBlank @Size(min = 12, max = 72) String password) {
     }
 
     public record MessageResponse(String message) {

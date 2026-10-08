@@ -271,6 +271,7 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .admin-login-intro { max-width: 500px; }
 .admin-login-form { display: grid; gap: 11px; padding: 26px; border: 1px solid #dce5dd; background: #fff; }
 .admin-auth-modes { display: flex; gap: 4px; margin: -4px 0 8px; border-bottom: 1px solid var(--line); }
+.admin-auth-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 14px; }
 .admin-auth-mode { min-height: 34px; padding: 0 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
 .admin-auth-mode-active { border-bottom-color: var(--green); color: var(--green-dark); }
 .admin-auth-recovery { justify-self: end; margin: -2px 0 7px; padding: 0; border: 0; background: transparent; color: var(--green); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
