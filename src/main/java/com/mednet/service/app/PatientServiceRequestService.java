@@ -1,5 +1,6 @@
 package com.mednet.service.app;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -115,7 +116,8 @@ public class PatientServiceRequestService {
                 .orElseThrow(PatientServiceRequestService::notFound);
         String next = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
         boolean valid = ("OPEN".equals(request.getStatus())
-                        && Set.of("IN_PROGRESS", "CANCELLED").contains(next))
+                        && ("CANCELLED".equals(next)
+                                || ("IN_PROGRESS".equals(next) && request.getAssignedStaffAccountId() == null)))
                 || ("IN_PROGRESS".equals(request.getStatus())
                         && "CANCELLED".equals(next));
         if (!valid) {
@@ -163,6 +165,31 @@ public class PatientServiceRequestService {
     }
 
     @Transactional
+    public PartnerRequestDetails scheduleHomeCare(String staffEmail, String requestId, Instant scheduledAt) {
+        PlatformAccountEntity staff = requirePartnerAccount(staffEmail, "HOME_CARE");
+        PatientServiceRequestEntity request = requests.findByIdForUpdate(requestId)
+                .filter(value -> "HOME_CARE".equals(value.getRequestType())
+                        && staff.getId().equals(value.getAssignedStaffAccountId()))
+                .orElseThrow(PatientServiceRequestService::notFound);
+        if (!"OPEN".equals(request.getStatus()) || request.getScheduledAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only unscheduled open home-care requests can be scheduled");
+        }
+        if (scheduledAt == null || !scheduledAt.isAfter(Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The home-care appointment time must be in the future");
+        }
+        request.scheduleAt(scheduledAt);
+        audit(staffEmail, "service_request.home_care_scheduled", requestId);
+        notifications.create(
+                request.getPatientAccountId(),
+                "service-request:" + requestId + ":scheduled",
+                "SERVICE_REQUEST",
+                "Your home-care request has been scheduled",
+                "service_request",
+                requestId);
+        return partnerDetails(request);
+    }
+
+    @Transactional
     public List<PartnerRequestDetails> listAssigned(String email, String requestType) {
         String type = normalizeType(requestType);
         PlatformAccountEntity staff = requirePartnerAccount(email, type);
@@ -183,9 +210,12 @@ public class PatientServiceRequestService {
             throw notFound();
         }
         String next = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
-        boolean starting = "OPEN".equals(request.getStatus()) && "IN_PROGRESS".equals(next);
+        boolean starting = "OPEN".equals(request.getStatus())
+                && "IN_PROGRESS".equals(next)
+                && (!"HOME_CARE".equals(request.getRequestType()) || request.getScheduledAt() != null);
         boolean completingHomeCare = "HOME_CARE".equals(staff.getAccountType())
                 && "IN_PROGRESS".equals(request.getStatus())
+                && request.getScheduledAt() != null
                 && "RESOLVED".equals(next);
         if (!starting && !completingHomeCare) {
             throw new ResponseStatusException(
@@ -239,6 +269,7 @@ public class PatientServiceRequestService {
                 request.getRequestedService(),
                 request.getLocationDescription(),
                 request.getStatus(),
+                request.getScheduledAt(),
                 request.getCreatedAt(),
                 request.getUpdatedAt());
     }
@@ -250,6 +281,7 @@ public class PatientServiceRequestService {
                 request.getRequestedService(),
                 request.getLocationDescription(),
                 request.getStatus(),
+                request.getScheduledAt(),
                 request.getCreatedAt(),
                 request.getUpdatedAt());
     }
@@ -264,6 +296,7 @@ public class PatientServiceRequestService {
             String requestedService,
             String locationDescription,
             String status,
+            Instant scheduledAt,
             java.time.Instant createdAt,
             java.time.Instant updatedAt) {
     }
@@ -288,6 +321,7 @@ public class PatientServiceRequestService {
             String requestedService,
             String locationDescription,
             String status,
+            Instant scheduledAt,
             java.time.Instant createdAt,
             java.time.Instant updatedAt) {
     }

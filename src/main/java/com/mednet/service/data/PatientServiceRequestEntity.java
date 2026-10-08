@@ -32,6 +32,9 @@ public class PatientServiceRequestEntity {
     @Column(name = "assigned_staff_account_id", length = 36)
     private String assignedStaffAccountId;
 
+    @Column(name = "scheduled_at")
+    private Instant scheduledAt;
+
     @Column(nullable = false, length = 20)
     private String status = "OPEN";
 
@@ -79,6 +82,10 @@ public class PatientServiceRequestEntity {
         this.assignedStaffAccountId = staffAccountId;
     }
 
+    public void scheduleAt(Instant scheduledAt) {
+        this.scheduledAt = scheduledAt;
+    }
+
     public String getId() {
         return id;
     }
@@ -101,6 +108,10 @@ public class PatientServiceRequestEntity {
 
     public String getAssignedStaffAccountId() {
         return assignedStaffAccountId;
+    }
+
+    public Instant getScheduledAt() {
+        return scheduledAt;
     }
 
     public String getStatus() {

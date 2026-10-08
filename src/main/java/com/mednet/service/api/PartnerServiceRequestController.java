@@ -1,5 +1,6 @@
 package com.mednet.service.api;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -17,7 +18,9 @@ import com.mednet.service.app.PatientServiceRequestService;
 import com.mednet.service.app.PatientServiceRequestService.PartnerRequestDetails;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -40,6 +43,15 @@ public class PartnerServiceRequestController {
         return service.listAssigned(actor.getName(), type);
     }
 
+    @PatchMapping("/{id}/schedule")
+    @PreAuthorize("hasRole('HOME_CARE')")
+    public PartnerRequestDetails scheduleHomeCare(
+            @PathVariable @Size(max = 36) String id,
+            @Valid @RequestBody ScheduleRequest request,
+            Authentication actor) {
+        return service.scheduleHomeCare(actor.getName(), id, request.scheduledAt());
+    }
+
     @PatchMapping("/{id}/status")
     public PartnerRequestDetails updateStatus(
             @PathVariable @Size(max = 36) String id,
@@ -50,5 +62,8 @@ public class PartnerServiceRequestController {
 
     public record StatusRequest(
             @NotBlank @Pattern(regexp = "(?i)IN_PROGRESS|RESOLVED") String status) {
+    }
+
+    public record ScheduleRequest(@NotNull @Future Instant scheduledAt) {
     }
 }

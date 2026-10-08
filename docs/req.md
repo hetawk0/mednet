@@ -1052,7 +1052,7 @@ The following assumptions have been made in preparing this document. If any is i
 
 ## 19. Open Questions Requiring Client Confirmation
 
-This section consolidates points on which the source document is silent. Questions marked "Blocking" prevent design or estimation from proceeding in the affected area. OQ-10 and OQ-11 have user-approved implementation decisions recorded below; these are implementation scope choices, not independent confirmation of the missing client source, and remain subject to sponsor confirmation.
+This section consolidates points on which the source document is silent. Questions marked "Blocking" prevent design or estimation from proceeding in the affected area. OQ-02, OQ-04, OQ-05, OQ-07, OQ-10, OQ-11, OQ-13 and OQ-24 record user-approved implementation policies or scope choices; these do not independently confirm the missing client source and remain subject to sponsor/legal confirmation where noted. OQ-41 records the implementation consequence of the approved laboratory staff role. OQ-42 records an engineering safeguard, not an approved clinical policy.
 
 | Ref   | Area          | Question                                                                                                                                                       | Urgency  |
 | ----- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -1096,8 +1096,8 @@ This section consolidates points on which the source document is silent. Questio
 | OQ-38 | Home care     | Which geographic areas are served in the first release?                                                                                                        | High     |
 | OQ-39 | Laboratory    | Does a laboratory request require a doctor's order, or may a patient initiate it alone?                                                                        | Blocking |
 | OQ-40 | Laboratory    | Are samples collected at a laboratory or at the patient's home?                                                                                                | High     |
-| OQ-41 | Laboratory    | How are results entered — uploaded by the laboratory, or entered by an administrator?                                                                          | Blocking |
-| OQ-42 | Laboratory    | Should a clinician review a result before the patient sees it?                                                                                                 | High     |
+| OQ-41 | Laboratory    | **Implementation decision following OQ-02 (2026-10-08):** assigned, authenticated laboratory staff enter text-only results. Binary result uploads and administrator entry are not enabled. | Resolved* |
+| OQ-42 | Laboratory    | **Conservative implementation safeguard (2026-10-08; not yet sponsor/legal approved):** an approved provider with an active care relationship and explicit patient consent must review and release a result before patient access. Confirm this policy and its legal sufficiency before production. | High     |
 | OQ-43 | Notifications | Which notification channels are used — in-app, SMS, email, push?                                                                                               | Blocking |
 | OQ-44 | Notifications | Is SMS required for patients without smartphones or reliable data? This carries an ongoing cost.                                                               | High     |
 | OQ-45 | Notifications | May users choose which notifications they receive?                                                                                                             | Medium   |

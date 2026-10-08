@@ -835,6 +835,28 @@ class MedNetApplicationTests {
                 .andExpect(jsonPath("$[0].requestedService").value("Nursing visit"))
                 .andExpect(jsonPath("$[0].locationDescription").value("Monrovia, Sinkor"))
                 .andExpect(jsonPath("$[0].patientAccountId").doesNotExist());
+        mockMvc.perform(patch("/api/v1/partner/service-requests/{id}/status", requestId)
+                .with(user("homecare-staff@mednet.test").roles("HOME_CARE"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"IN_PROGRESS\"}"))
+                .andExpect(status().isConflict());
+        Instant homeCareScheduledAt = Instant.now().plusSeconds(3600);
+        mockMvc.perform(patch("/api/v1/partner/service-requests/{id}/schedule", requestId)
+                .with(user("homecare-staff@mednet.test").roles("HOME_CARE"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"scheduledAt":"%s"}
+                        """.formatted(homeCareScheduledAt)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scheduledAt").value(homeCareScheduledAt.toString()));
+        mockMvc.perform(patch("/api/v1/admin/service-requests/{id}/status", requestId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"IN_PROGRESS\"}"))
+                .andExpect(status().isConflict());
         mockMvc.perform(patch("/api/v1/admin/service-requests/{id}/status", requestId)
                 .with(user(ADMIN_EMAIL).roles("ADMIN"))
                 .with(csrf())
@@ -858,7 +880,8 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api/v1/home-care-requests")
                 .with(user(patientEmail).roles("PATIENT")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].status").value("RESOLVED"));
+                .andExpect(jsonPath("$[0].status").value("RESOLVED"))
+                .andExpect(jsonPath("$[0].scheduledAt").value(homeCareScheduledAt.toString()));
 
         MvcResult labResult = mockMvc.perform(post("/api/v1/lab-requests")
                 .with(user(patientEmail).roles("PATIENT"))
@@ -916,6 +939,61 @@ class MedNetApplicationTests {
                 .content("{\"status\":\"IN_PROGRESS\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+        MvcResult firstResult = mockMvc.perform(post(
+                        "/api/v1/partner/service-requests/{id}/lab-result", labRequestId)
+                .with(user("lab-staff@mednet.test").roles("LABORATORY"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"summary\":\"Reported result: 4.1 units\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING_REVIEW"))
+                .andReturn();
+        String firstResultId = objectMapper.readTree(firstResult.getResponse().getContentAsString())
+                .get("id").asText();
+        mockMvc.perform(get("/api/v1/patients/me/lab-results")
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(get("/api/v1/patients/me/lab-results/{id}", firstResultId)
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/patients/{patientId}/lab-results/pending", patient.getId())
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(firstResultId));
+        mockMvc.perform(patch("/api/v1/lab-results/{id}/review", firstResultId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"RETURN\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RETURNED"));
+        MvcResult finalResult = mockMvc.perform(post(
+                        "/api/v1/partner/service-requests/{id}/lab-result", labRequestId)
+                .with(user("lab-staff@mednet.test").roles("LABORATORY"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"summary\":\"Reported result: 4.2 units\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING_REVIEW"))
+                .andReturn();
+        String finalResultId = objectMapper.readTree(finalResult.getResponse().getContentAsString())
+                .get("id").asText();
+        mockMvc.perform(patch("/api/v1/lab-results/{id}/review", finalResultId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"RELEASE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RELEASED"));
+        mockMvc.perform(get("/api/v1/patients/me/lab-results/{id}", finalResultId)
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary").value("Reported result: 4.2 units"));
+        mockMvc.perform(get("/api/v1/patients/me/records")
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].category").value("LAB_RESULT"));
         mockMvc.perform(patch("/api/v1/partner/service-requests/{id}/status", labRequestId)
                 .with(user("lab-staff@mednet.test").roles("LABORATORY"))
                 .with(csrf())
