@@ -306,19 +306,22 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
             >
               {mode === "forgot" ? "Back to sign in" : "Forgot password?"}
             </button>
-            <button
-              className="admin-auth-recovery"
-              type="button"
-              onClick={() => {
-                setError("");
-                setMessage("");
-                setMode(mode === "resend" ? "login" : "resend");
-              }}
-            >
-              {mode === "resend"
-                ? "Back to sign in"
-                : "Resend verification email"}
-            </button>
+            {(mode === "resend" ||
+              (mode === "login" && Boolean(error || message))) && (
+              <button
+                className="admin-auth-recovery"
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setMessage("");
+                  setMode(mode === "resend" ? "login" : "resend");
+                }}
+              >
+                {mode === "resend"
+                  ? "Back to sign in"
+                  : "Resend verification email"}
+              </button>
+            )}
           </div>
           <form className="admin-account-form" onSubmit={submit}>
             <label htmlFor="account-email">Email address</label>
@@ -347,51 +350,10 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
                 {error}
               </p>
             )}
-            {mode === "login" && error && (
-              <div className="admin-verification-help">
-                <p>
-                  If your email is not verified yet, you can request a fresh
-                  verification link. Email verification uses a link, not a
-                  numeric code.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError("");
-                    setMessage("");
-                    setMode("resend");
-                  }}
-                >
-                  Resend verification link
-                  <span aria-hidden="true">→</span>
-                </button>
-              </div>
-            )}
             {message && (
-              <>
-                <p className="admin-form-note" role="status">
-                  {message}
-                </p>
-                {mode === "login" && (
-                  <div className="admin-verification-help">
-                    <p>
-                      Didn&apos;t receive the verification email? You can request a
-                      new link.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setError("");
-                        setMessage("");
-                        setMode("resend");
-                      }}
-                    >
-                      Resend verification link
-                      <span aria-hidden="true">→</span>
-                    </button>
-                  </div>
-                )}
-              </>
+              <p className="admin-form-note" role="status">
+                {message}
+              </p>
             )}
             {mode === "resend" && (
               <p className="admin-verification-note">
