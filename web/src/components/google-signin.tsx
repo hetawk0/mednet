@@ -60,6 +60,8 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [emailInput, setEmailInput] = useState("");
+  const [resendVerificationAvailable, setResendVerificationAvailable] =
+    useState(false);
 
   useEffect(() => {
     let active = true;
@@ -120,6 +122,7 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
     setBusy(true);
     setError("");
     setMessage("");
+    setResendVerificationAvailable(false);
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "").trim();
     const password = String(formData.get("password") ?? "");
@@ -139,8 +142,15 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
           },
           body: new URLSearchParams({ email, password }),
         });
-        if (!response.ok)
+        if (response.status === 503)
+          throw new Error(
+            "Sign-in is temporarily unavailable. Please try again shortly.",
+          );
+        if (!response.ok) {
+          if (response.status === 401)
+            setResendVerificationAvailable(true);
           throw new Error("Sign-in failed. Verify your email and password.");
+        }
         const sessionResponse = await fetch("/api/v1/auth/session", {
           cache: "no-store",
           credentials: "same-origin",
@@ -178,6 +188,7 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
           result.message ??
             "We’ve received your request. If a new account can be created for this email, we’ll send a verification link. You can request another link below.",
         );
+        setResendVerificationAvailable(true);
         setEmailInput(email);
         setMode("login");
       } else if (mode === "resend") {
@@ -277,7 +288,10 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
                   : "admin-auth-mode"
               }
               aria-pressed={mode === "login"}
-              onClick={() => setMode("login")}
+              onClick={() => {
+                setResendVerificationAvailable(false);
+                setMode("login");
+              }}
             >
               Sign in
             </button>
@@ -289,7 +303,10 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
                   : "admin-auth-mode"
               }
               aria-pressed={mode === "register"}
-              onClick={() => setMode("register")}
+              onClick={() => {
+                setResendVerificationAvailable(false);
+                setMode("register");
+              }}
             >
               Create account
             </button>
@@ -301,6 +318,7 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
               onClick={() => {
                 setError("");
                 setMessage("");
+                setResendVerificationAvailable(false);
                 setMode(mode === "forgot" ? "login" : "forgot");
               }}
             >
@@ -313,6 +331,7 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
                 onClick={() => {
                   setError("");
                   setMessage("");
+                  setResendVerificationAvailable(false);
                   setMode("login");
                 }}
               >
@@ -347,13 +366,14 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
                 <p className="admin-error" role="alert">
                   {error}
                 </p>
-                {mode === "login" && (
+                {mode === "login" && resendVerificationAvailable && (
                   <div className="admin-verification-help">
                     <button
                       type="button"
                       onClick={() => {
                         setError("");
                         setMessage("");
+                        setResendVerificationAvailable(false);
                         setMode("resend");
                       }}
                     >
@@ -369,13 +389,14 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
                 <p className="admin-form-note" role="status">
                   {message}
                 </p>
-                {mode === "login" && (
+                {mode === "login" && resendVerificationAvailable && (
                   <div className="admin-verification-help">
                     <button
                       type="button"
                       onClick={() => {
                         setError("");
                         setMessage("");
+                        setResendVerificationAvailable(false);
                         setMode("resend");
                       }}
                     >

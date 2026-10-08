@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.InternalAuthenticationServiceException;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.core.userdetails.User;
@@ -69,7 +70,8 @@ public class SecurityConfig {
             }
             PlatformAccountRepository accounts = accountsProvider.getIfAvailable();
             if (accounts == null) {
-                throw new UsernameNotFoundException("Database-backed account sign-in is unavailable");
+                throw new InternalAuthenticationServiceException(
+                        "Database-backed account sign-in is unavailable");
             }
             PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalizedUsername)
                     .orElseThrow(() -> new UsernameNotFoundException("Account not found"));
@@ -145,9 +147,7 @@ public class SecurityConfig {
                         .usernameParameter("email")
                         .passwordParameter("password")
                         .successHandler(loginSuccess)
-                        .failureHandler((request, response, exception) -> writeError(
-                                objectMapper, request, response, HttpServletResponse.SC_UNAUTHORIZED,
-                                "UNAUTHORIZED", "Invalid email or password")))
+                        .failureHandler(loginFailureHandler(objectMapper)))
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")
                         .logoutSuccessHandler((request, response, authentication) -> response
@@ -203,6 +203,22 @@ public class SecurityConfig {
         }
 
         return http.build();
+    }
+
+    static AuthenticationFailureHandler loginFailureHandler(ObjectMapper objectMapper) {
+        return (request, response, exception) -> {
+            if (exception instanceof InternalAuthenticationServiceException) {
+                String requestId = (String) request.getAttribute(ApiRequestIdFilter.ATTRIBUTE_NAME);
+                log.error("Authentication account lookup failed for request {}", requestId, exception);
+                writeError(
+                        objectMapper, request, response, HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                        "SERVICE_UNAVAILABLE", "Sign-in is temporarily unavailable");
+                return;
+            }
+            writeError(
+                    objectMapper, request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "UNAUTHORIZED", "Invalid email or password");
+        };
     }
 
     private static void writeError(
