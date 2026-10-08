@@ -80,7 +80,7 @@ type CsrfResponse = {
 
 const moduleLabels: Record<string, string> = {
   providerReview: "Provider applications",
-  accountSupport: "Account registry",
+  accountSupport: "User management",
   serviceRequests: "Service request queue",
   auditTrail: "Administrative audit trail",
 };
@@ -104,6 +104,8 @@ export function AdminPortal() {
     totalPages: 0,
     totalElements: 0,
   });
+  const [accountSearch, setAccountSearch] = useState("");
+  const [accountStatus, setAccountStatus] = useState("");
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [auditEvents, setAuditEvents] = useState<AdminAuditEvent[]>([]);
   const [error, setError] = useState("");
@@ -117,6 +119,28 @@ export function AdminPortal() {
     });
     if (!response.ok) throw new Error("The admin API could not be reached.");
     setOverview((await response.json()) as AdminOverview);
+  }
+
+  async function searchAccounts(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const search = String(formData.get("search") ?? "").trim();
+    const status = String(formData.get("status") ?? "");
+    setAccountSearch(search);
+    setAccountStatus(status);
+    setBusy(true);
+    setError("");
+    try {
+      await reloadTab("accounts", 0, { search, status });
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not search accounts.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -236,9 +260,19 @@ export function AdminPortal() {
   async function reloadTab(
     tab: Exclude<AdminTab, "overview">,
     requestedPage = 0,
+    filters: { search?: string; status?: string } = {},
   ) {
     const endpoint = tab === "audit" ? "audit" : tab;
-    const query = tab === "accounts" ? `?page=${requestedPage}&size=25` : "";
+    const accountQuery = new URLSearchParams({
+      page: String(requestedPage),
+      size: "25",
+    });
+    const search = filters.search ?? accountSearch;
+    const status = filters.status ?? accountStatus;
+    if (search.trim()) accountQuery.set("search", search.trim());
+    if (status) accountQuery.set("status", status);
+    const query =
+      tab === "accounts" ? `?${accountQuery.toString()}` : "";
     const response = await fetch(`/api/v1/admin/${endpoint}${query}`, {
       cache: "no-store",
       credentials: "same-origin",
@@ -276,7 +310,7 @@ export function AdminPortal() {
     const moduleStatus = overview?.modules.find(
       (module) => module.key === moduleKeys[tab],
     )?.status;
-    if (moduleStatus !== "CONNECTED") return;
+    if (moduleStatus !== "CONNECTED" && moduleStatus !== "PARTIAL") return;
 
     try {
       await reloadTab(tab);
@@ -310,6 +344,20 @@ export function AdminPortal() {
       },
       body: JSON.stringify(body),
     });
+    if (response.status === 401)
+      throw new Error("Your administrator session expired. Sign in again.");
+    if (response.status === 403)
+      throw new Error(
+        path.endsWith("/role")
+          ? "Only a SUPER_ADMIN can change account roles."
+          : "Your administrator account does not have permission for this action.",
+      );
+    if (response.status === 409)
+      throw new Error(
+        method === "POST" && path === "accounts"
+          ? "An account with this email already exists."
+          : "This account is protected or cannot be changed while linked to existing records.",
+      );
     if (!response.ok)
       throw new Error(`Admin operation failed (${response.status}).`);
   }
@@ -385,20 +433,41 @@ export function AdminPortal() {
   }
 
   async function deleteAccount(id: string) {
+    const account = accounts.find((candidate) => candidate.id === id);
+    if (
+      !account ||
+      !window.confirm(
+        `Permanently delete ${account.email}? Accounts linked to clinical or care records cannot be deleted.`,
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       const csrfResponse = await fetch("/api/v1/auth/csrf", {
         credentials: "same-origin",
       });
+      if (!csrfResponse.ok)
+        throw new Error("Could not initialize the secure request.");
       const csrf = (await csrfResponse.json()) as CsrfResponse;
       const response = await fetch(`/api/v1/admin/accounts/${id}`, {
         method: "DELETE",
         credentials: "same-origin",
         headers: { [csrf.headerName]: csrf.token },
       });
+      if (response.status === 401)
+        throw new Error("Your administrator session expired. Sign in again.");
+      if (response.status === 403)
+        throw new Error("Only a SUPER_ADMIN can delete accounts.");
+      if (response.status === 409)
+        throw new Error(
+          "This account is protected because it is linked to clinical or care records.",
+        );
       if (!response.ok)
-        throw new Error(`Account deletion failed (${response.status}).`);
+        throw new Error(
+          `Account deletion failed (${response.status}).`,
+        );
       await reloadTab("accounts");
       await refreshOverview();
     } catch (mutationError) {
@@ -608,6 +677,9 @@ export function AdminPortal() {
         <AdminWorkspace
           activeTab={activeTab}
           accountPage={accountPage}
+          accountSearch={accountSearch}
+          accountStatus={accountStatus}
+          isSuperAdmin={session?.role === "SUPER_ADMIN"}
           accounts={accounts}
           auditEvents={auditEvents}
           busy={busy}
@@ -619,6 +691,7 @@ export function AdminPortal() {
           onChangeRole={changeAccountRole}
           onDeleteAccount={deleteAccount}
           onChangeAccountPage={changeAccountPage}
+          onSearchAccounts={searchAccounts}
           onCreate={createRecord}
           onOpenTab={openTab}
           onRefresh={() =>
@@ -635,6 +708,9 @@ export function AdminPortal() {
 function AdminWorkspace({
   activeTab,
   accountPage,
+  accountSearch,
+  accountStatus,
+  isSuperAdmin,
   accounts,
   auditEvents,
   busy,
@@ -646,12 +722,16 @@ function AdminWorkspace({
   onChangeRole,
   onDeleteAccount,
   onChangeAccountPage,
+  onSearchAccounts,
   onCreate,
   onOpenTab,
   onRefresh,
 }: {
   activeTab: AdminTab;
   accountPage: { number: number; totalPages: number; totalElements: number };
+  accountSearch: string;
+  accountStatus: string;
+  isSuperAdmin: boolean;
   accounts: PlatformAccount[];
   auditEvents: AdminAuditEvent[];
   busy: boolean;
@@ -668,6 +748,7 @@ function AdminWorkspace({
   onChangeRole: (id: string, accountType: string) => Promise<void>;
   onDeleteAccount: (id: string) => Promise<void>;
   onChangeAccountPage: (page: number) => Promise<void>;
+  onSearchAccounts: (event: FormEvent<HTMLFormElement>) => void;
   onCreate: (
     event: FormEvent<HTMLFormElement>,
     path: string,
@@ -679,7 +760,7 @@ function AdminWorkspace({
   const tabs: Array<{ key: AdminTab; label: string }> = [
     { key: "overview", label: "Overview" },
     { key: "providers", label: "Providers" },
-    { key: "accounts", label: "Accounts" },
+    { key: "accounts", label: "User management" },
     { key: "requests", label: "Requests" },
     { key: "audit", label: "Audit" },
   ];
@@ -938,9 +1019,11 @@ function AdminWorkspace({
         ) : activeTab === "accounts" ? (
           <section className="admin-workflow-section">
             <p className="admin-workflow-note">
-              This is a non-clinical account registry. Verified accounts use
-              their assigned role for access; only SUPER_ADMIN can change roles
-              or delete accounts.
+              Manage platform accounts here. New account records must complete
+              normal registration and email verification before sign-in. ADMIN
+              can suspend or reactivate accounts; only SUPER_ADMIN can change
+              roles or delete accounts. Accounts linked to clinical or care
+              records are protected from deletion and role changes.
             </p>
             <form
               className="admin-record-form"
@@ -955,10 +1038,35 @@ function AdminWorkspace({
                 <select name="accountType" defaultValue="PATIENT">
                   <option value="PATIENT">Patient</option>
                   <option value="PROVIDER">Provider</option>
+                  <option value="HOME_CARE">Home care staff</option>
+                  <option value="LABORATORY">Laboratory staff</option>
                 </select>
               </label>
               <button className="admin-submit" type="submit" disabled={busy}>
-                Add account record
+                Create account
+              </button>
+            </form>
+            <form className="admin-account-filters" onSubmit={onSearchAccounts}>
+              <label>
+                Search by email
+                <input
+                  name="search"
+                  type="search"
+                  maxLength={254}
+                  defaultValue={accountSearch}
+                  placeholder="name@example.com"
+                />
+              </label>
+              <label>
+                Account status
+                <select name="status" defaultValue={accountStatus}>
+                  <option value="">All statuses</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </label>
+              <button className="admin-submit" type="submit" disabled={busy}>
+                Search accounts
               </button>
             </form>
             <div className="admin-table-wrap">
@@ -974,7 +1082,12 @@ function AdminWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {accounts.map((account) => (
+                  {accounts.length === 0 ? (
+                    <tr>
+                      <td colSpan={6}>No accounts match these filters.</td>
+                    </tr>
+                  ) : (
+                    accounts.map((account) => (
                     <tr key={account.id}>
                       <td>{account.email}</td>
                       <td>{account.accountType}</td>
@@ -1002,29 +1115,36 @@ function AdminWorkspace({
                             ? "Suspend record"
                             : "Reactivate record"}
                         </button>
-                        <select
-                          aria-label={`Change role for ${account.email}`}
-                          value={account.accountType}
-                          disabled={busy}
-                          onChange={(event) =>
-                            void onChangeRole(account.id, event.target.value)
-                          }
-                        >
-                          <option value="PATIENT">Patient</option>
-                          <option value="PROVIDER">Provider</option>
-                          <option value="ADMIN">Admin</option>
-                          <option value="SUPER_ADMIN">Super admin</option>
-                        </select>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void onDeleteAccount(account.id)}
-                        >
-                          Delete
-                        </button>
+                        {isSuperAdmin && (
+                          <>
+                            <select
+                              aria-label={`Change role for ${account.email}`}
+                              value={account.accountType}
+                              disabled={busy}
+                              onChange={(event) =>
+                                void onChangeRole(account.id, event.target.value)
+                              }
+                            >
+                              <option value="PATIENT">Patient</option>
+                              <option value="PROVIDER">Provider</option>
+                              <option value="ADMIN">Admin</option>
+                              <option value="SUPER_ADMIN">Super admin</option>
+                              <option value="HOME_CARE">Home care staff</option>
+                              <option value="LABORATORY">Laboratory staff</option>
+                            </select>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void onDeleteAccount(account.id)}
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
-                  ))}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

@@ -16,7 +16,13 @@ The OpenAPI specification is generated from the running Spring Boot application:
 The production reference is protected and requires a MedNet `ADMIN` or `SUPER_ADMIN` session.
 Sign in through the MedNet web application using an account provisioned for development; do not
 share administrator credentials. The API paths are routed to the Spring Boot service by the
-Launchpad manifest.
+Launchpad manifest. The docs endpoints accept the canonical URLs above; their trailing-slash
+variants redirect to those canonical paths.
+
+The admin console's **User management** area supports account provisioning, search and status
+filtering, suspension/reactivation, and (for `SUPER_ADMIN` only) role changes and deletion.
+Provisioned accounts still complete the normal registration and email-verification flow. Accounts
+linked to care or clinical records cannot be deleted or have their role changed.
 
 ## Local development
 

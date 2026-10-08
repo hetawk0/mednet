@@ -57,6 +57,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -1166,12 +1167,40 @@ class MedNetApplicationTests {
     void openApiSpecificationIsAvailableOnlyToAdministrators() throws Exception {
         mockMvc.perform(get("/api-docs"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api-docs/"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/swagger-ui/"))
+                .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api-docs")
                 .with(user(ADMIN_EMAIL).roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("MedNet API"))
                 .andExpect(jsonPath("$.openapi").exists());
+
+        mockMvc.perform(get("/api-docs/")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().is(308))
+                .andExpect(header().string("Location", "/api-docs"));
+
+        mockMvc.perform(get("/swagger-ui/")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().is(308))
+                .andExpect(header().string("Location", "/swagger-ui"));
+
+        mockMvc.perform(get("/swagger-ui")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().is3xxRedirection());
+
+        mockMvc.perform(get("/swagger-ui/index.html")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML));
+
+        mockMvc.perform(get("/api-docs/swagger-config")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("/api-docs"));
     }
 
     @Test
