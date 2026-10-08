@@ -306,20 +306,17 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
             >
               {mode === "forgot" ? "Back to sign in" : "Forgot password?"}
             </button>
-            {(mode === "resend" ||
-              (mode === "login" && Boolean(error || message))) && (
+            {mode === "resend" && (
               <button
                 className="admin-auth-recovery"
                 type="button"
                 onClick={() => {
                   setError("");
                   setMessage("");
-                  setMode(mode === "resend" ? "login" : "resend");
+                  setMode("login");
                 }}
               >
-                {mode === "resend"
-                  ? "Back to sign in"
-                  : "Resend verification email"}
+                Back to sign in
               </button>
             )}
           </div>
@@ -346,14 +343,48 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
               />
             )}
             {error && (
-              <p className="admin-error" role="alert">
-                {error}
-              </p>
+              <>
+                <p className="admin-error" role="alert">
+                  {error}
+                </p>
+                {mode === "login" && (
+                  <div className="admin-verification-help">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setMessage("");
+                        setMode("resend");
+                      }}
+                    >
+                      Resend verification email
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                )}
+              </>
             )}
             {message && (
-              <p className="admin-form-note" role="status">
-                {message}
-              </p>
+              <>
+                <p className="admin-form-note" role="status">
+                  {message}
+                </p>
+                {mode === "login" && (
+                  <div className="admin-verification-help">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setMessage("");
+                        setMode("resend");
+                      }}
+                    >
+                      Resend verification email
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                )}
+              </>
             )}
             {mode === "resend" && (
               <p className="admin-verification-note">
