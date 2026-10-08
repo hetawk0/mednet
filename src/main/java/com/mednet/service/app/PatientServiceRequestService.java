@@ -71,6 +71,13 @@ public class PatientServiceRequestService {
                 "Your service request has been received",
                 "service_request",
                 saved.getId());
+        notifications.createForAccountTypes(
+                List.of("ADMIN", "SUPER_ADMIN"),
+                "service-request:" + saved.getId() + ":new",
+                "SERVICE_REQUEST",
+                "A new service request is awaiting assignment",
+                "service_request",
+                saved.getId());
         return details(saved);
     }
 

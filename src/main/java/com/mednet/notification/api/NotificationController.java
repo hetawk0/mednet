@@ -17,7 +17,7 @@ import com.mednet.notification.app.NotificationService.NotificationDetails;
 @RestController
 @RequestMapping("/api/v1/notifications")
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url")
-@PreAuthorize("hasAnyRole('PATIENT', 'PROVIDER')")
+@PreAuthorize("hasAnyRole('PATIENT', 'PROVIDER', 'ADMIN', 'SUPER_ADMIN', 'HOME_CARE', 'LABORATORY')")
 public class NotificationController {
 
     private final NotificationService service;

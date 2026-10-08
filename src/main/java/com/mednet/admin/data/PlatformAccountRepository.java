@@ -10,6 +10,8 @@ import org.springframework.data.domain.Pageable;
 public interface PlatformAccountRepository extends JpaRepository<PlatformAccountEntity, String> {
     List<PlatformAccountEntity> findTop100ByOrderByCreatedAtDesc();
 
+    List<PlatformAccountEntity> findByAccountTypeInAndStatus(List<String> accountTypes, String status);
+
     Optional<PlatformAccountEntity> findFirstByEmailIgnoreCase(String email);
 
     Optional<PlatformAccountEntity> findFirstByGoogleSubject(String googleSubject);

@@ -1,13 +1,15 @@
 package com.mednet.auth.security;
 
 import java.util.Locale;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.core.userdetails.User;
@@ -55,6 +57,9 @@ public class SecurityConfig {
             PlatformAccountRepository accounts,
             ProviderApplicationRepository providers) {
         String normalizedAdminEmail = adminEmail.trim().toLowerCase(Locale.ROOT);
+        if (!normalizedAdminEmail.isBlank() && !adminPassword.isBlank()) {
+            ensureConfiguredAdministratorAccount(normalizedAdminEmail, accounts);
+        }
         UserDetails administrator = normalizedAdminEmail.isBlank() || adminPassword.isBlank()
                 ? null
                 : User.withUsername(normalizedAdminEmail)
@@ -86,6 +91,29 @@ public class SecurityConfig {
                     .accountExpired(!account.isEmailVerified())
                     .build();
         };
+    }
+
+    private static void ensureConfiguredAdministratorAccount(
+            String email, PlatformAccountRepository accounts) {
+        PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(email).orElse(null);
+        if (account == null) {
+            PlatformAccountEntity configuredAdmin =
+                    new PlatformAccountEntity(UUID.randomUUID().toString(), email, "SUPER_ADMIN");
+            configuredAdmin.verifyEmail();
+            try {
+                account = accounts.saveAndFlush(configuredAdmin);
+            } catch (DataIntegrityViolationException concurrentInitialization) {
+                account = accounts.findFirstByEmailIgnoreCase(email).orElseThrow(() -> concurrentInitialization);
+            }
+        }
+        if (!"SUPER_ADMIN".equals(account.getAccountType()) || !"ACTIVE".equals(account.getStatus())) {
+            throw new IllegalStateException(
+                    "The configured administrator email must belong to an active SUPER_ADMIN account");
+        }
+        if (!account.isEmailVerified()) {
+            account.verifyEmail();
+            accounts.save(account);
+        }
     }
 
     @Bean

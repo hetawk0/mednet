@@ -1,6 +1,7 @@
 package com.mednet.notification.app;
 
 import java.util.UUID;
+import java.util.List;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
@@ -45,6 +46,25 @@ public class NotificationService {
                     title,
                     resourceType,
                     resourceId));
+        }
+    }
+
+    @Transactional
+    public void createForAccountTypes(
+            List<String> accountTypes,
+            String eventKey,
+            String eventType,
+            String title,
+            String resourceType,
+            String resourceId) {
+        for (PlatformAccountEntity recipient : accounts.findByAccountTypeInAndStatus(accountTypes, "ACTIVE")) {
+            create(
+                    recipient.getId(),
+                    eventKey + ":" + recipient.getId(),
+                    eventType,
+                    title,
+                    resourceType,
+                    resourceId);
         }
     }
 

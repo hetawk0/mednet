@@ -46,6 +46,7 @@ import com.mednet.medication.data.MedicationScheduleRepository;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -286,6 +287,11 @@ class MedNetApplicationTests {
         String applicationId = objectMapper.readTree(applicationResult.getResponse().getContentAsString())
                 .get("id").asText();
 
+        mockMvc.perform(get("/api/v1/notifications")
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.resourceId == '" + applicationId + "')]").isNotEmpty());
+
         assertThat(userDetailsService.loadUserByUsername(providerEmail).getAuthorities())
                 .extracting("authority")
                 .contains("ROLE_PATIENT");
@@ -298,13 +304,21 @@ class MedNetApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.credentialReference").value("LIC-TEST-42"));
 
-        ProviderApplicationEntity application = providerApplications.findById(applicationId).orElseThrow();
-        application.review("APPROVED", ADMIN_EMAIL);
-        providerApplications.save(application);
+        mockMvc.perform(patch("/api/v1/admin/providers/{id}/status", applicationId)
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"APPROVED\"}"))
+                .andExpect(status().isOk());
 
         assertThat(userDetailsService.loadUserByUsername(providerEmail).getAuthorities())
                 .extracting("authority")
                 .contains("ROLE_PROVIDER");
+        mockMvc.perform(get("/api/v1/notifications")
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.resourceId == '" + applicationId + "')].title")
+                        .value(org.hamcrest.Matchers.hasItem("Your provider application was approved")));
         mockMvc.perform(get("/api/v1/providers")
                 .param("specialty", "Family")
                 .param("search", "Example"))
@@ -314,8 +328,12 @@ class MedNetApplicationTests {
                 .andExpect(jsonPath("$.content[0].credentialReference").value("LIC-TEST-42"))
                 .andExpect(jsonPath("$.content[0].email").doesNotExist());
 
-        application.review("SUSPENDED", ADMIN_EMAIL);
-        providerApplications.save(application);
+        mockMvc.perform(patch("/api/v1/admin/providers/{id}/status", applicationId)
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"SUSPENDED\"}"))
+                .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/providers")
                 .param("search", "Dr Example"))
                 .andExpect(status().isOk())
@@ -835,6 +853,11 @@ class MedNetApplicationTests {
                 .andReturn();
         String requestId = objectMapper.readTree(homeCareResult.getResponse().getContentAsString())
                 .get("id").asText();
+        mockMvc.perform(get("/api/v1/notifications")
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.resourceId == '" + requestId + "')].title")
+                        .value(org.hamcrest.Matchers.hasItem("A new service request is awaiting assignment")));
         MvcResult homeCareAccountResult = mockMvc.perform(post("/api/v1/admin/accounts")
                 .with(user(ADMIN_EMAIL).roles("ADMIN"))
                 .with(csrf())
@@ -876,6 +899,10 @@ class MedNetApplicationTests {
                         """.formatted(homeCareStaff.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.assignedStaffAccountId").value(homeCareStaff.getId()));
+        mockMvc.perform(get("/api/v1/notifications")
+                .with(user("homecare-staff@mednet.test").roles("HOME_CARE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].title").value("A service request has been assigned to you"));
         mockMvc.perform(patch("/api/v1/admin/service-requests/{id}/assignment", requestId)
                 .with(user(ADMIN_EMAIL).roles("ADMIN"))
                 .with(csrf())
@@ -1280,6 +1307,24 @@ class MedNetApplicationTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"accountType\":\"SUPER_ADMIN\"}"))
                 .andExpect(status().isForbidden());
+
+        PlatformAccountEntity configuredAdmin = accounts.findFirstByEmailIgnoreCase(ADMIN_EMAIL).orElseThrow();
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/status", configuredAdmin.getId())
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"SUSPENDED\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/role", configuredAdmin.getId())
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"accountType\":\"PATIENT\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(delete("/api/v1/admin/accounts/{id}", configuredAdmin.getId())
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf()))
+                .andExpect(status().isConflict());
     }
 
     @Test

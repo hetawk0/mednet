@@ -5,6 +5,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -30,6 +31,7 @@ import com.mednet.appointment.data.AppointmentRepository;
 import com.mednet.message.data.ConversationRepository;
 import com.mednet.medication.data.MedicationScheduleRepository;
 import com.mednet.patient.data.PatientProfileRepository;
+import com.mednet.notification.app.NotificationService;
 import com.mednet.provider.data.ProviderApplicationEntity;
 import com.mednet.provider.data.ProviderApplicationRepository;
 import com.mednet.record.data.ClinicalRecordRepository;
@@ -62,6 +64,8 @@ public class AdminWorkflowService {
     private final MedicationScheduleRepository medicationSchedules;
     private final PatientVitalRepository patientVitals;
     private final PatientServiceRequestRepository patientServiceRequests;
+    private final NotificationService notifications;
+    private final String configuredAdminEmail;
 
     public AdminWorkflowService(
             ProviderApplicationRepository providers,
@@ -75,7 +79,9 @@ public class AdminWorkflowService {
             ConversationRepository conversations,
             MedicationScheduleRepository medicationSchedules,
             PatientVitalRepository patientVitals,
-            PatientServiceRequestRepository patientServiceRequests) {
+            PatientServiceRequestRepository patientServiceRequests,
+            NotificationService notifications,
+            @Value("${mednet.admin.email:}") String configuredAdminEmail) {
         this.providers = providers;
         this.accounts = accounts;
         this.requests = requests;
@@ -88,6 +94,8 @@ public class AdminWorkflowService {
         this.medicationSchedules = medicationSchedules;
         this.patientVitals = patientVitals;
         this.patientServiceRequests = patientServiceRequests;
+        this.notifications = notifications;
+        this.configuredAdminEmail = normalizeEmail(configuredAdminEmail);
     }
 
     @Transactional(readOnly = true)
@@ -114,10 +122,24 @@ public class AdminWorkflowService {
 
     @Transactional
     public ProviderApplication reviewProvider(String id, String status, String actor) {
-        ProviderApplicationEntity entity = providers.findById(id).orElseThrow(() -> notFound("Provider application"));
+        ProviderApplicationEntity entity = providers.findByIdForUpdate(id)
+                .orElseThrow(() -> notFound("Provider application"));
         String nextStatus = requireStatus(status, PROVIDER_STATUSES);
         entity.review(nextStatus, actor);
         audit(actor, "provider." + nextStatus.toLowerCase(Locale.ROOT), "provider", id);
+        if ("APPROVED".equals(nextStatus) || "REJECTED".equals(nextStatus)) {
+            accounts.findFirstByEmailIgnoreCase(entity.getEmail())
+                    .filter(account -> "ACTIVE".equals(account.getStatus()))
+                    .ifPresent(account -> notifications.create(
+                            account.getId(),
+                            "provider-review:" + id + ":" + entity.getReviewedAt(),
+                            "PROVIDER_APPLICATION",
+                            "APPROVED".equals(nextStatus)
+                                    ? "Your provider application was approved"
+                                    : "Your provider application was not approved",
+                            "provider",
+                            id));
+        }
         return toModel(entity);
     }
 
@@ -157,6 +179,7 @@ public class AdminWorkflowService {
     @Transactional
     public PlatformAccount changeAccountStatus(String id, String status, String actor) {
         PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
+        requireNotConfiguredAdmin(entity);
         String nextStatus = requireStatus(status, ACCOUNT_STATUSES);
         entity.changeStatus(nextStatus);
         audit(actor, "account." + nextStatus.toLowerCase(Locale.ROOT), "account", id);
@@ -166,6 +189,7 @@ public class AdminWorkflowService {
     @Transactional
     public PlatformAccount changeAccountType(String id, String accountType, String actor) {
         PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
+        requireNotConfiguredAdmin(entity);
         String nextType = requireStatus(accountType, ACCOUNT_TYPES);
         if (hasProtectedAccountData(entity)) {
             throw new ResponseStatusException(
@@ -180,6 +204,7 @@ public class AdminWorkflowService {
     @Transactional
     public void deleteAccount(String id, String actor) {
         PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
+        requireNotConfiguredAdmin(entity);
         if (hasProtectedAccountData(entity)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -187,6 +212,13 @@ public class AdminWorkflowService {
         }
         accounts.delete(entity);
         audit(actor, "account.deleted", "account", id);
+    }
+
+    private void requireNotConfiguredAdmin(PlatformAccountEntity account) {
+        if (!configuredAdminEmail.isBlank() && configuredAdminEmail.equalsIgnoreCase(account.getEmail())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "The configured administrator account cannot be modified or deleted");
+        }
     }
 
     private boolean hasProtectedAccountData(PlatformAccountEntity account) {

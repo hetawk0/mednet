@@ -1,5 +1,6 @@
 package com.mednet.provider.app;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mednet.admin.data.AdminAuditEventEntity;
 import com.mednet.admin.data.AdminAuditEventRepository;
+import com.mednet.notification.app.NotificationService;
 import com.mednet.provider.data.ProviderApplicationEntity;
 import com.mednet.provider.data.ProviderApplicationRepository;
 
@@ -26,12 +28,15 @@ public class ProviderService {
 
     private final ProviderApplicationRepository applications;
     private final AdminAuditEventRepository auditEvents;
+    private final NotificationService notifications;
 
     public ProviderService(
             ProviderApplicationRepository applications,
-            AdminAuditEventRepository auditEvents) {
+            AdminAuditEventRepository auditEvents,
+            NotificationService notifications) {
         this.applications = applications;
         this.auditEvents = auditEvents;
+        this.notifications = notifications;
     }
 
     @Transactional(readOnly = true)
@@ -70,6 +75,13 @@ public class ProviderService {
                 "provider.application_submitted",
                 "provider",
                 application.getId()));
+        notifications.createForAccountTypes(
+                List.of("ADMIN", "SUPER_ADMIN"),
+                "provider-application:" + application.getId() + ":pending",
+                "PROVIDER_APPLICATION",
+                "A provider application is awaiting review",
+                "provider",
+                application.getId());
         return toApplication(application);
     }
 
