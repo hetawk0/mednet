@@ -8,16 +8,16 @@ validation, or clinical workflow rules.
 
 The OpenAPI specification is generated from the running Spring Boot application:
 
-- Production Swagger UI: <https://mednet.lpad.ekddigital.com/swagger-ui>
-- Production OpenAPI JSON: <https://mednet.lpad.ekddigital.com/api-docs>
+- Production Swagger UI: <https://mednet.lpad.ekddigital.com/swagger-ui/>
+- Production OpenAPI JSON: <https://mednet.lpad.ekddigital.com/api-docs/>
 - Local Swagger UI: <http://localhost:8080/swagger-ui>
-- Local OpenAPI JSON: <http://localhost:8080/api-docs>
+- Local OpenAPI JSON: <http://localhost:8080/api-docs/>
 
 The production reference is protected and requires a MedNet `ADMIN` or `SUPER_ADMIN` session.
 Sign in through the MedNet web application using an account provisioned for development; do not
 share administrator credentials. The API paths are routed to the Spring Boot service by the
-Launchpad manifest. The docs endpoints accept the canonical URLs above; their trailing-slash
-variants redirect to those canonical paths.
+Launchpad manifest. Production uses trailing-slash canonical paths; Swagger UI routes directly
+to its index from `/swagger-ui/` to avoid a redirect loop with the hosting proxy.
 
 The admin console's **User management** area supports account provisioning, search and status
 filtering, suspension/reactivation, and (for `SUPER_ADMIN` only) role changes and deletion.

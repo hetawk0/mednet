@@ -1175,18 +1175,18 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api-docs")
                 .with(user(ADMIN_EMAIL).roles("ADMIN")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.info.title").value("MedNet API"))
                 .andExpect(jsonPath("$.openapi").exists());
 
         mockMvc.perform(get("/api-docs/")
                 .with(user(ADMIN_EMAIL).roles("ADMIN")))
-                .andExpect(status().is(308))
-                .andExpect(header().string("Location", "/api-docs"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.info.title").value("MedNet API"))
+                .andExpect(jsonPath("$.openapi").exists());
 
         mockMvc.perform(get("/swagger-ui/")
                 .with(user(ADMIN_EMAIL).roles("ADMIN")))
                 .andExpect(status().is(308))
-                .andExpect(header().string("Location", "/swagger-ui"));
+                .andExpect(header().string("Location", "/swagger-ui/index.html"));
 
         mockMvc.perform(get("/swagger-ui")
                 .with(user(ADMIN_EMAIL).roles("ADMIN")))
@@ -1200,7 +1200,7 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api-docs/swagger-config")
                 .with(user(ADMIN_EMAIL).roles("ADMIN")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.url").value("/api-docs"));
+                .andExpect(jsonPath("$.url").value("/api-docs/"));
     }
 
     @Test
