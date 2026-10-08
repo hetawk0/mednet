@@ -392,6 +392,7 @@ export function AdminPortal() {
               type="button"
               aria-expanded={userMenuOpen}
               aria-haspopup="menu"
+              aria-label={`Administrator menu for ${session.email}`}
               onClick={() => setUserMenuOpen((open) => !open)}
             >
               <span className="admin-avatar" aria-hidden="true">
@@ -402,12 +403,29 @@ export function AdminPortal() {
                 <small>Administrator</small>
               </span>
               <span className="admin-menu-chevron" aria-hidden="true">
-                {userMenuOpen ? "-" : "+"}
+                <svg
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  aria-hidden="true"
+                  className={userMenuOpen ? "admin-menu-chevron-open" : ""}
+                >
+                  <path
+                    d="m5.5 7.5 4.5 4.5 4.5-4.5"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </span>
             </button>
             {userMenuOpen && (
               <div className="admin-user-menu" role="menu">
-                <Link href="/account" role="menuitem">
+                <Link
+                  href="/account"
+                  role="menuitem"
+                  onClick={() => setUserMenuOpen(false)}
+                >
                   Account settings
                 </Link>
                 <button
