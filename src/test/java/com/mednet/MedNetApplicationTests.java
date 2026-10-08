@@ -3,6 +3,10 @@ package com.mednet;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -14,6 +18,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
 import org.springframework.boot.health.contributor.Status;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -57,7 +62,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 
-@SpringBootTest(properties = {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "mednet.google.enabled=true",
         "server.servlet.session.cookie.secure=false",
         "spring.datasource.url=jdbc:h2:mem:mednet;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -84,6 +89,9 @@ class MedNetApplicationTests {
 
     @Autowired
     private HealthEndpoint healthEndpoint;
+
+    @LocalServerPort
+    private int serverPort;
 
     @Autowired
     private MockMvc mockMvc;
@@ -131,8 +139,15 @@ class MedNetApplicationTests {
     private EkdSendEmailService emailService;
 
     @Test
-    void healthEndpointReportsApplicationUp() {
+    void healthEndpointReportsApplicationUp() throws Exception {
         assertThat(healthEndpoint.health().getStatus()).isEqualTo(Status.UP);
+        HttpResponse<String> response = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + serverPort + "/actuator/health"))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"status\":\"UP\"");
     }
 
     @Test
