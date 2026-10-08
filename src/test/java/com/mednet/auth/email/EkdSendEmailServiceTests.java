@@ -89,6 +89,24 @@ class EkdSendEmailServiceTests {
                 .isFalse();
     }
 
+    @Test
+    void acceptsTheDocumentedQueuedResponseShape() {
+        responseBody.set("{\"id\":\"queued-message\",\"status\":\"QUEUED\"}");
+        EkdSendEmailService service = service("configured@example.test");
+
+        assertThat(service.send("patient@example.test", "subject", "<p>hello</p>", "hello"))
+                .isTrue();
+    }
+
+    @Test
+    void rejectsUnrecognizedSuccessfulResponseInsteadOfClaimingEmailWasQueued() {
+        responseBody.set("{\"message\":\"request received\"}");
+        EkdSendEmailService service = service("configured@example.test");
+
+        assertThat(service.send("patient@example.test", "subject", "<p>hello</p>", "hello"))
+                .isFalse();
+    }
+
     private EkdSendEmailService service(String from) {
         return new EkdSendEmailService(
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/api/v1/",

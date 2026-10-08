@@ -1,6 +1,8 @@
 package com.mednet.auth.email;
 
 import java.util.Map;
+import java.util.Locale;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +20,8 @@ public class EkdSendEmailService {
     private static final String DEFAULT_API_URL = "https://es.ekddigital.com/api/v1";
     private static final String DEFAULT_FROM = "support@ekddigital.com";
     private static final String DEFAULT_USER_AGENT = "MedNet/1.0";
+    private static final Set<String> ACCEPTED_STATUSES =
+            Set.of("ACCEPTED", "QUEUED", "SENT", "DELIVERED");
     private final RestClient client;
     private final String apiKey;
     private final String from;
@@ -56,10 +60,15 @@ public class EkdSendEmailService {
                             "text", text))
                     .retrieve()
                     .body(EkdSendResponse.class);
-            if (response != null && Boolean.FALSE.equals(response.success())) {
-                log.warn("EKDSend did not accept the email request");
+            if (response == null || !response.accepted()) {
+                log.warn("EKDSend returned HTTP success without confirming that the email was queued");
                 return false;
             }
+            String messageId = response.messageId() != null ? response.messageId() : response.id();
+            log.info(
+                    "EKDSend accepted email request (messageId={}, status={})",
+                    messageId == null ? "unavailable" : messageId,
+                    response.status() == null ? "accepted" : response.status());
             return true;
         } catch (RestClientResponseException exception) {
             log.warn("EKDSend rejected an email request with HTTP {}", exception.getStatusCode().value());
@@ -71,5 +80,16 @@ public class EkdSendEmailService {
     }
 
     private record EkdSendResponse(Boolean success, String messageId, String id, String status) {
+        private boolean accepted() {
+            if (Boolean.FALSE.equals(success)) {
+                return false;
+            }
+            if (Boolean.TRUE.equals(success)) {
+                return true;
+            }
+            boolean hasId = (messageId != null && !messageId.isBlank()) || (id != null && !id.isBlank());
+            return hasId && status != null
+                    && ACCEPTED_STATUSES.contains(status.trim().toUpperCase(Locale.ROOT));
+        }
     }
 }
