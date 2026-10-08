@@ -46,7 +46,8 @@ public class MedNetApplication {
                         normalizedEnvironment.get("SPRING_DATASOURCE_PASSWORD"));
             }
             String googleClientId = normalizeEnvironmentValue(context.getEnvironment().getProperty("GOOGLE_CLIENT_ID"));
-            String googleClientSecret = normalizeEnvironmentValue(context.getEnvironment().getProperty("GOOGLE_CLIENT_SECRET"));
+            String googleClientSecret = normalizeEnvironmentValue(
+                    context.getEnvironment().getProperty("GOOGLE_CLIENT_SECRET"));
             if (StringUtils.hasText(googleClientId) && StringUtils.hasText(googleClientSecret)) {
                 normalizedEnvironment.put("mednet.google.enabled", true);
             }
