@@ -42,6 +42,10 @@ schemas, status codes, and parameters. The current guarded MVP includes:
 - Patient home-care and laboratory requests, assigned partner work queues, and laboratory result review/release.
 - Administrator dashboard, provider review, account provisioning, and operational workflows.
 
+Provider availability slots expose `consultationMode` as `IN_PERSON` or `TEXT`; omit it only for
+legacy compatibility, where the backend defaults it to `TEXT`. Appointment responses include the
+selected slot's mode. Only confirmed `TEXT` appointments can open a text consultation.
+
 ## Important scope boundaries
 
 The backend is a guarded MVP, not a completed clinical/service launch. Video or voice consultations,

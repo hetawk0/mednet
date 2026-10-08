@@ -17,6 +17,8 @@ import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.appointment.data.AppointmentEntity;
 import com.mednet.appointment.data.AppointmentRepository;
+import com.mednet.provider.data.ProviderAvailabilitySlotEntity;
+import com.mednet.provider.data.ProviderAvailabilitySlotRepository;
 import com.mednet.consultation.data.ConsultationEntity;
 import com.mednet.consultation.data.ConsultationMessageEntity;
 import com.mednet.consultation.data.ConsultationMessageRepository;
@@ -31,6 +33,7 @@ public class ConsultationService {
 
     private final PatientCareAccess careAccess;
     private final AppointmentRepository appointments;
+    private final ProviderAvailabilitySlotRepository availabilitySlots;
     private final ConsultationRepository consultations;
     private final ConsultationMessageRepository messages;
     private final AdminAuditEventRepository auditEvents;
@@ -39,12 +42,14 @@ public class ConsultationService {
     public ConsultationService(
             PatientCareAccess careAccess,
             AppointmentRepository appointments,
+            ProviderAvailabilitySlotRepository availabilitySlots,
             ConsultationRepository consultations,
             ConsultationMessageRepository messages,
             AdminAuditEventRepository auditEvents,
             NotificationService notifications) {
         this.careAccess = careAccess;
         this.appointments = appointments;
+        this.availabilitySlots = availabilitySlots;
         this.consultations = consultations;
         this.messages = messages;
         this.auditEvents = auditEvents;
@@ -58,6 +63,12 @@ public class ConsultationService {
         Participant participant = participant(appointment, email, role);
         if (!"CONFIRMED".equals(appointment.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A confirmed appointment is required");
+        }
+        ProviderAvailabilitySlotEntity slot = availabilitySlots.findById(appointment.getAvailabilitySlotId())
+                .orElseThrow(ConsultationService::notFound);
+        if (!"TEXT".equals(slot.getConsultationMode())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Text consultations are only available for text appointment slots");
         }
         ConsultationEntity session = consultations.findByAppointmentId(appointmentId).orElse(null);
         if (session == null) {

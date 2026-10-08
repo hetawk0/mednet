@@ -25,6 +25,9 @@ public class ProviderAvailabilitySlotEntity {
     @Column(name = "ends_at", nullable = false)
     private Instant endsAt;
 
+    @Column(name = "consultation_mode", nullable = false, length = 16)
+    private String consultationMode = "TEXT";
+
     @Column(nullable = false, length = 16)
     private String status = "OPEN";
 
@@ -36,10 +39,16 @@ public class ProviderAvailabilitySlotEntity {
 
     public ProviderAvailabilitySlotEntity(
             String id, String providerApplicationId, Instant startsAt, Instant endsAt) {
+        this(id, providerApplicationId, startsAt, endsAt, "TEXT");
+    }
+
+    public ProviderAvailabilitySlotEntity(
+            String id, String providerApplicationId, Instant startsAt, Instant endsAt, String consultationMode) {
         this.id = id;
         this.providerApplicationId = providerApplicationId;
         this.startsAt = startsAt;
         this.endsAt = endsAt;
+        this.consultationMode = consultationMode;
     }
 
     @PrePersist
@@ -63,6 +72,10 @@ public class ProviderAvailabilitySlotEntity {
 
     public Instant getEndsAt() {
         return endsAt;
+    }
+
+    public String getConsultationMode() {
+        return consultationMode;
     }
 
     public String getStatus() {

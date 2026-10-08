@@ -21,6 +21,7 @@ import com.mednet.provider.app.ProviderAvailabilityService.AvailabilitySlot;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 @RestController
 @RequestMapping("/api/v1/providers")
@@ -46,7 +47,8 @@ public class ProviderAvailabilityController {
     public AvailabilitySlot create(
             @Valid @RequestBody CreateAvailabilityRequest request,
             Authentication actor) {
-        return service.create(actor.getName(), request.startsAt(), request.endsAt());
+        return service.create(
+                actor.getName(), request.startsAt(), request.endsAt(), request.consultationMode());
     }
 
     @DeleteMapping("/me/availability/{slotId}")
@@ -60,6 +62,7 @@ public class ProviderAvailabilityController {
 
     public record CreateAvailabilityRequest(
             @NotNull @Future Instant startsAt,
-            @NotNull @Future Instant endsAt) {
+            @NotNull @Future Instant endsAt,
+            @Pattern(regexp = "(?i)IN_PERSON|TEXT") String consultationMode) {
     }
 }

@@ -160,10 +160,10 @@ The current API preserves its established success response bodies for frontend c
 | Notification | `/api/v1/notifications`, `/api/v1/notifications/{id}/read`                    |
 | Admin        | `/api/v1/admin/dashboard`, `/api/v1/admin/providers/pending`                  |
 
-Availability is represented by explicit future instants (ISO-8601 timestamps), not recurring schedules. A pending or
-confirmed appointment reserves its slot. Rescheduling requires the other participant's acceptance; cancellation is
-allowed before the slot starts. The current contract intentionally has no attendance-mode, payment, cancellation-fee,
-or no-show fields while their product decisions remain open.
+Availability is represented by explicit future instants (ISO-8601 timestamps), not recurring schedules. Providers may
+mark a slot `IN_PERSON` or `TEXT`; omitted modes default to `TEXT` for compatibility with existing clients. A pending
+or confirmed appointment reserves its slot. Rescheduling requires the other participant's acceptance; cancellation is
+allowed before the slot starts. Payment is out of scope; cancellation fees and no-show behavior remain undefined.
 
 ### Medical records (current implementation)
 

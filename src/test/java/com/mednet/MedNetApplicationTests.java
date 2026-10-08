@@ -685,6 +685,13 @@ class MedNetApplicationTests {
                 UUID.randomUUID().toString(), patientEmail, "PATIENT");
         patient.verifyEmail();
         accounts.save(patient);
+        patientProfiles.save(new PatientProfileEntity(
+                UUID.randomUUID().toString(),
+                patient.getId(),
+                "Guarded Patient",
+                LocalDate.of(1990, 4, 12),
+                "+231 770 987 654",
+                "Monrovia"));
         PlatformAccountEntity providerAccount = new PlatformAccountEntity(
                 UUID.randomUUID().toString(), providerEmail, "PROVIDER");
         providerAccount.verifyEmail();
@@ -694,15 +701,42 @@ class MedNetApplicationTests {
                 UUID.randomUUID().toString(), "Guarded Provider", providerEmail, "Family Medicine", "LIC-GUARD-1");
         provider.review("APPROVED", ADMIN_EMAIL);
         providerApplications.save(provider);
+        Instant inPersonStartsAt = Instant.now().plusSeconds(10800);
+        MvcResult inPersonSlotResult = mockMvc.perform(post("/api/v1/providers/me/availability")
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"startsAt":"%s","endsAt":"%s","consultationMode":"IN_PERSON"}
+                        """.formatted(inPersonStartsAt, inPersonStartsAt.plusSeconds(1800))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.consultationMode").value("IN_PERSON"))
+                .andReturn();
+        String inPersonSlotId = objectMapper.readTree(inPersonSlotResult.getResponse().getContentAsString())
+                .get("id").asText();
         ProviderAvailabilitySlotEntity slot = availabilitySlots.save(new ProviderAvailabilitySlotEntity(
                 UUID.randomUUID().toString(),
                 provider.getId(),
                 Instant.now().plusSeconds(7200),
                 Instant.now().plusSeconds(9000)));
+        ProviderAvailabilitySlotEntity inPersonSlot = availabilitySlots.findById(inPersonSlotId).orElseThrow();
         AppointmentEntity appointment = new AppointmentEntity(
                 UUID.randomUUID().toString(), patient.getId(), provider.getId(), slot.getId());
         appointment.confirm();
         appointments.save(appointment);
+        AppointmentEntity inPersonAppointment = new AppointmentEntity(
+                UUID.randomUUID().toString(), patient.getId(), provider.getId(), inPersonSlot.getId());
+        inPersonAppointment.confirm();
+        appointments.save(inPersonAppointment);
+
+        mockMvc.perform(get("/api/v1/appointments/{id}", inPersonAppointment.getId())
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.consultationMode").value("IN_PERSON"));
+        mockMvc.perform(post("/api/v1/appointments/{id}/consultation", inPersonAppointment.getId())
+                .with(user(patientEmail).roles("PATIENT"))
+                .with(csrf()))
+                .andExpect(status().isConflict());
 
         MvcResult conversationResult = mockMvc.perform(post("/api/v1/conversations")
                 .with(user(patientEmail).roles("PATIENT"))

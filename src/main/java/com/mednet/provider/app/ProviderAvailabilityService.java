@@ -1,6 +1,7 @@
 package com.mednet.provider.app;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -37,12 +38,18 @@ public class ProviderAvailabilityService {
     }
 
     @Transactional
-    public AvailabilitySlot create(String providerEmail, Instant startsAt, Instant endsAt) {
+    public AvailabilitySlot create(String providerEmail, Instant startsAt, Instant endsAt, String consultationMode) {
         if (!startsAt.isAfter(Instant.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Availability must start in the future");
         }
         if (!endsAt.isAfter(startsAt)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Availability end must follow its start");
+        }
+        String normalizedMode = consultationMode == null || consultationMode.isBlank()
+                ? "TEXT"
+                : consultationMode.trim().toUpperCase(Locale.ROOT);
+        if (!normalizedMode.equals("TEXT") && !normalizedMode.equals("IN_PERSON")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported appointment mode");
         }
         ProviderApplicationEntity provider = requireApprovedProviderByEmail(providerEmail);
         ProviderApplicationEntity lockedProvider = applications.findByIdForUpdate(provider.getId())
@@ -55,7 +62,7 @@ public class ProviderAvailabilityService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Availability slots may not overlap");
         }
         ProviderAvailabilitySlotEntity saved = slots.save(new ProviderAvailabilitySlotEntity(
-                UUID.randomUUID().toString(), lockedProvider.getId(), startsAt, endsAt));
+                UUID.randomUUID().toString(), lockedProvider.getId(), startsAt, endsAt, normalizedMode));
         auditEvents.save(new AdminAuditEventEntity(
                 UUID.randomUUID().toString(),
                 lockedProvider.getEmail(),
@@ -115,13 +122,13 @@ public class ProviderAvailabilityService {
     }
 
     private static AvailabilitySlot toModel(ProviderAvailabilitySlotEntity slot) {
-        return new AvailabilitySlot(slot.getId(), slot.getStartsAt(), slot.getEndsAt());
+        return new AvailabilitySlot(slot.getId(), slot.getStartsAt(), slot.getEndsAt(), slot.getConsultationMode());
     }
 
     private static ResponseStatusException notFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Approved provider or availability not found");
     }
 
-    public record AvailabilitySlot(String id, Instant startsAt, Instant endsAt) {
+    public record AvailabilitySlot(String id, Instant startsAt, Instant endsAt, String consultationMode) {
     }
 }
