@@ -21,7 +21,7 @@ cp .env.example .env
 mvn spring-boot:run
 ```
 
-Spring Boot imports the root `.env` file for local runs. The root `.gitignore` excludes `.env`; never commit it. Flyway applies versioned SQL migrations from `src/main/resources/db/migration` at API startup. The API listens on `http://localhost:8080` by default. Check health at `http://localhost:8080/actuator/health`.
+Spring Boot imports the root `.env` file for local runs. The root `.gitignore` excludes `.env`; never commit it. Flyway applies versioned SQL migrations from `src/main/resources/db/migration` at API startup. The API bounds its Hikari pool to five connections and retries Flyway connection attempts to handle brief shared-database saturation during deployments. The API listens on `http://localhost:8080` by default. Check health at `http://localhost:8080/actuator/health`.
 
 The OpenAPI specification is available at `http://localhost:8080/api-docs` and Swagger UI at
 `http://localhost:8080/swagger-ui` after administrator sign-in.

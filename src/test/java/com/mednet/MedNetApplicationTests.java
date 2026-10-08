@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.zaxxer.hikari.HikariDataSource;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -90,6 +92,12 @@ class MedNetApplicationTests {
     @Autowired
     private HealthEndpoint healthEndpoint;
 
+    @Autowired
+    private HikariDataSource dataSource;
+
+    @Autowired
+    private Flyway flyway;
+
     @LocalServerPort
     private int serverPort;
 
@@ -148,6 +156,14 @@ class MedNetApplicationTests {
                 HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"status\":\"UP\"");
+    }
+
+    @Test
+    void databasePoolIsBoundedAndFlywayRetriesTemporaryConnectionExhaustion() {
+        assertThat(dataSource.getMaximumPoolSize()).isEqualTo(5);
+        assertThat(dataSource.getMinimumIdle()).isEqualTo(1);
+        assertThat(flyway.getConfiguration().getConnectRetries()).isEqualTo(10);
+        assertThat(flyway.getConfiguration().getConnectRetriesInterval()).isEqualTo(2);
     }
 
     @Test
