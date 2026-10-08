@@ -9,7 +9,7 @@ MedNet is a two-service application: a Spring Boot API (`/`) and a Next.js web c
 - Node.js 20.9 or newer and npm
 - PostgreSQL for persistent admin workflows
 
-The API can start without PostgreSQL for health checks, but admin data workflows remain unavailable until a PostgreSQL JDBC URL is configured.
+The API can start without PostgreSQL for health checks and configured-super-admin access. Database-backed patient registration/sign-in, provider, clinical, and admin workflows remain unavailable until a PostgreSQL JDBC URL is configured.
 
 ## Run locally
 

@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,6 +32,7 @@ import com.mednet.auth.email.EkdSendEmailService;
 
 @RestController
 @RequestMapping("/api/v1/auth")
+@ConditionalOnProperty(prefix = "spring.datasource", name = "url")
 public class AccountAuthController {
 
     private static final Duration VERIFICATION_LIFETIME = Duration.ofHours(24);

@@ -52,8 +52,8 @@ public class SecurityConfig {
             @Value("${mednet.admin.email:}") String adminEmail,
             @Value("${mednet.admin.password:}") String adminPassword,
             PasswordEncoder passwordEncoder,
-            PlatformAccountRepository accounts,
-            ProviderApplicationRepository providers) {
+            ObjectProvider<PlatformAccountRepository> accountsProvider,
+            ObjectProvider<ProviderApplicationRepository> providersProvider) {
         String normalizedAdminEmail = adminEmail.trim().toLowerCase(Locale.ROOT);
         UserDetails administrator = normalizedAdminEmail.isBlank() || adminPassword.isBlank()
                 ? null
@@ -67,6 +67,10 @@ public class SecurityConfig {
             if (administrator != null && normalizedAdminEmail.equals(normalizedUsername)) {
                 return administrator;
             }
+            PlatformAccountRepository accounts = accountsProvider.getIfAvailable();
+            if (accounts == null) {
+                throw new UsernameNotFoundException("Database-backed account sign-in is unavailable");
+            }
             PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalizedUsername)
                     .orElseThrow(() -> new UsernameNotFoundException("Account not found"));
             if (account.getPasswordHash() == null) {
@@ -74,9 +78,10 @@ public class SecurityConfig {
             }
             String role = account.getAccountType();
             if (role.equals("PATIENT") || role.equals("PROVIDER")) {
-                boolean approvedProvider = providers
-                        .findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(normalizedUsername, "APPROVED")
-                        .isPresent();
+                ProviderApplicationRepository providers = providersProvider.getIfAvailable();
+                boolean approvedProvider = providers != null
+                        && providers.findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(
+                                normalizedUsername, "APPROVED").isPresent();
                 role = approvedProvider ? "PROVIDER" : "PATIENT";
             }
             return User.withUsername(account.getEmail())

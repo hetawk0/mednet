@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -18,12 +19,15 @@ class SecurityConfigTests {
     void configuredAdministratorAuthenticationDoesNotAccessDatabaseDuringStartup() {
         PlatformAccountRepository accounts = mock(PlatformAccountRepository.class);
         ProviderApplicationRepository providers = mock(ProviderApplicationRepository.class);
+        StaticListableBeanFactory beanFactory = new StaticListableBeanFactory();
+        beanFactory.addBean("accounts", accounts);
+        beanFactory.addBean("providers", providers);
         UserDetailsService service = new SecurityConfig().userDetailsService(
                 "admin@example.test",
                 "admin-password",
                 new BCryptPasswordEncoder(),
-                accounts,
-                providers);
+                beanFactory.getBeanProvider(PlatformAccountRepository.class),
+                beanFactory.getBeanProvider(ProviderApplicationRepository.class));
 
         UserDetails administrator = service.loadUserByUsername("admin@example.test");
 
