@@ -20,6 +20,9 @@ For production, set these values in the MedNet environment in LPAD:
 | `GOOGLE_CLIENT_ID`           | Google OAuth web client ID; server-side only                            |
 | `GOOGLE_CLIENT_SECRET`       | Google OAuth client secret; store as a secret                           |
 | `GOOGLE_REDIRECT_URI`        | OAuth callback URI registered in Google Cloud                           |
+| `EKDSEND_API_URL`            | EKDSend API base URL; defaults to `https://es.ekddigital.com/api/v1`   |
+| `EKDSEND_API_KEY`            | Server-side EKDSend API key; store as a secret                          |
+| `FROM_EMAIL`                 | Verified sender address; defaults to `support@ekddigital.com`            |
 
 Do not put production credentials in Git, `.lpad/manifest.json`, or public frontend variables. Use a long, unique password and rotate it by changing the LPAD secret and restarting the API service. The committed `.env.example` contains placeholders only, never usable credentials.
 
@@ -27,7 +30,7 @@ The API hashes the configured password with BCrypt at startup and authenticates 
 
 ## Account email delivery
 
-MedNet uses the server-side EKDSend API for account verification, resend-verification, forgot-password, and password-reset messages. Configure `EKDSEND_API_URL`, `EKDSEND_API_KEY`, and `FROM_EMAIL` in LPAD or the local `.env`; keep the API key server-only. Password recovery sends a six-digit code that expires after 10 minutes; five invalid attempts invalidate it. The password form is unlocked only after server verification, and the resulting reset ticket is single-use.
+MedNet uses the server-side EKDSend API for account verification, resend-verification, forgot-password, and password-reset messages. Configure `EKDSEND_API_URL`, `EKDSEND_API_KEY`, and `FROM_EMAIL` in LPAD or the local `.env`; keep the API key server-only. MedNet sends both `html` and `body` fields for provider compatibility and authenticates with the API key headers used by the other EKD projects. A failed registration email returns an explicit service-unavailable error instead of claiming that a message was sent; the account and hashed verification token remain saved so submitting registration again issues a fresh link. Password recovery sends a six-digit code that expires after 10 minutes; five invalid attempts invalidate it. The password form is unlocked only after server verification, and the resulting reset ticket is single-use.
 
 ## Google sign-in
 
@@ -42,7 +45,7 @@ Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the environment-specific `GO
 
 The API validates Google's OpenID ID token using Google's published signing-key endpoint (`https://www.googleapis.com/oauth2/v3/certs`). Keep that JWK Set URI configured on the Google client registration; without it, Google returns to `/sign-in?error=google` and the API logs `missing_signature_verifier`.
 
-Only verified Google email addresses are accepted. The email matching `MEDNET_ADMIN_EMAIL` receives the `SUPER_ADMIN` role; other new Google accounts default to patient access. A provider role is assigned only when an administrator has approved an application for that email. Existing `ADMIN` and `SUPER_ADMIN` account roles remain in force at Google sign-in. Google login also requires the PostgreSQL datasource because account identity is persisted there.
+Only verified Google email addresses are accepted. The email matching `MEDNET_ADMIN_EMAIL` receives the `SUPER_ADMIN` role; other new Google accounts default to patient access. A provider role is assigned only when an administrator has approved an application for that email. Existing `ADMIN` and `SUPER_ADMIN` account roles remain in force at Google sign-in. The OIDC callback links the verified identity to the MedNet account, persists the MedNet role, and sends patients to `/patient`; that dashboard shows appointment and service-request counts only, not clinical details. Google login also requires the PostgreSQL datasource because account identity is persisted there.
 
 If Google returns to `/sign-in?error=google`, the page shows a generic recovery message while the API logs a provider error code or a MedNet account-policy rejection. Confirm the registered redirect URI above and inspect the API logs; never include client secrets or tokens in support reports.
 

@@ -8,6 +8,48 @@ type GoogleStatus = { enabled: boolean };
 type AccountSession = { email: string; role: string };
 type CsrfResponse = { headerName: string; token: string };
 
+function destinationForRole(role: string) {
+  if (role === "ADMIN" || role === "SUPER_ADMIN") return "/admin";
+  if (role === "PATIENT") return "/patient";
+  return "/account";
+}
+
+function safeDestination(redirect: string | null, fallback: string) {
+  if (
+    !redirect?.startsWith("/") ||
+    redirect.startsWith("//") ||
+    redirect.includes("\\")
+  ) {
+    return fallback;
+  }
+  let requested: URL;
+  try {
+    requested = new URL(redirect, window.location.origin);
+  } catch {
+    return fallback;
+  }
+  if (
+    requested.origin !== window.location.origin ||
+    requested.pathname === "/sign-in"
+  ) {
+    return fallback;
+  }
+  return `${requested.pathname}${requested.search}${requested.hash}`;
+}
+
+async function responseError(response: Response, fallback: string) {
+  try {
+    const payload = (await response.json()) as {
+      detail?: string;
+      message?: string;
+      error?: { message?: string };
+    };
+    return payload.detail ?? payload.message ?? payload.error?.message ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function GoogleSignIn({ googleError }: { googleError: boolean }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -33,24 +75,10 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
         const redirect = new URLSearchParams(window.location.search).get(
           "redirect",
         );
-        const fallback =
-          session.role === "ADMIN" || session.role === "SUPER_ADMIN"
-            ? "/admin"
-            : "/account";
-        let destination = fallback;
-        if (
-          redirect?.startsWith("/") &&
-          !redirect.startsWith("//") &&
-          !redirect.includes("\\")
-        ) {
-          const requested = new URL(redirect, window.location.origin);
-          if (
-            requested.origin === window.location.origin &&
-            requested.pathname !== "/sign-in"
-          ) {
-            destination = `${requested.pathname}${requested.search}${requested.hash}`;
-          }
-        }
+        const destination = safeDestination(
+          redirect,
+          destinationForRole(session.role),
+        );
         window.location.replace(destination);
       } catch {
         if (active) setSessionChecked(true);
@@ -96,6 +124,7 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
       const csrfResponse = await fetch("/api/v1/auth/csrf", {
         credentials: "same-origin",
       });
+      if (!csrfResponse.ok) throw new Error("Could not prepare your request.");
       const csrf = (await csrfResponse.json()) as CsrfResponse;
       if (mode === "login") {
         const response = await fetch("/api/v1/auth/login", {
@@ -109,11 +138,20 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
         });
         if (!response.ok)
           throw new Error("Sign-in failed. Verify your email and password.");
+        const sessionResponse = await fetch("/api/v1/auth/session", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!sessionResponse.ok)
+          throw new Error(
+            "Sign-in succeeded, but your account could not be loaded. Refresh to continue.",
+          );
+        const session = (await sessionResponse.json()) as AccountSession;
         const redirect = new URLSearchParams(window.location.search).get(
           "redirect",
         );
-        window.location.assign(
-          redirect?.startsWith("/") ? redirect : "/account",
+        window.location.replace(
+          safeDestination(redirect, destinationForRole(session.role)),
         );
       } else if (mode === "register") {
         const response = await fetch("/api/v1/auth/register", {
@@ -125,9 +163,16 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
           },
           body: JSON.stringify({ email, password }),
         });
-        if (!response.ok) throw new Error("We could not create that account.");
+        if (!response.ok)
+          throw new Error(
+            await responseError(
+              response,
+              "We could not send your verification email. Please try again shortly.",
+            ),
+          );
+        const result = (await response.json()) as { message?: string };
         setMessage(
-          "Check your email for a verification link before signing in.",
+          `${result.message ?? "Verification instructions have been sent."} Check your inbox and spam folder. If needed, choose Create account and submit these details again to request a fresh link.`,
         );
         setMode("login");
       } else {
@@ -314,7 +359,15 @@ export function UserAccountPortal() {
           setState("signed-out");
           return;
         }
-        setSession((await response.json()) as AccountSession);
+        const currentSession = (await response.json()) as AccountSession;
+        if (
+          currentSession.role === "ADMIN" ||
+          currentSession.role === "SUPER_ADMIN"
+        ) {
+          window.location.replace("/admin");
+          return;
+        }
+        setSession(currentSession);
         setState("signed-in");
       } catch {
         if (!active) return;

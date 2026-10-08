@@ -901,6 +901,8 @@ class MedNetApplicationTests {
                 .andReturn();
         String homeCareStaffId = objectMapper.readTree(homeCareAccountResult.getResponse().getContentAsString())
                 .get("id").asText();
+        doAnswer(invocation -> true).when(emailService).send(
+                anyString(), anyString(), anyString(), anyString());
         mockMvc.perform(post("/api/v1/auth/register")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)

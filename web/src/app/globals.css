@@ -379,10 +379,31 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .admin-pagination button { min-height: 30px; padding: 0 9px; border: 1px solid #c8d6cc; background: #fff; color: #153f34; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
 .admin-pagination button:disabled { opacity: .45; cursor: default; }
 
+.patient-signout { margin-left: auto; }
+.patient-dashboard .admin-page-heading { margin-bottom: 34px; }
+.patient-dashboard .admin-page-heading h1 { margin: 0; color: #18352f; font-family: var(--font-display), Georgia, serif; font-size: clamp(38px, 5vw, 58px); font-weight: 400; line-height: 1.05; }
+.patient-dashboard-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.patient-dashboard-card { min-height: 235px; display: flex; flex-direction: column; align-items: flex-start; padding: 23px; border: 1px solid #dce5dd; background: #fff; }
+.patient-dashboard-card .admin-eyebrow { margin-bottom: 13px; }
+.patient-dashboard-card h2 { margin: 0; color: #18352f; font-family: var(--font-display), Georgia, serif; font-size: 25px; font-weight: 400; line-height: 1.15; }
+.patient-dashboard-card > p:not(.admin-eyebrow) { margin: 12px 0 18px; color: #6d7e76; font-size: 12px; line-height: 1.65; }
+.patient-dashboard-card .patient-dashboard-count { color: #23624d; font-size: 13px; font-weight: 700; }
+.patient-dashboard-card .text-link { margin-top: auto; font-size: 11px; }
+.patient-dashboard-note { margin: 22px 0 0; padding: 13px 15px; border-left: 3px solid #d8ed9e; background: #fff; color: #6d7e76; font-size: 11px; line-height: 1.65; }
+.patient-profile-page h1 { margin: 0; color: #18352f; font-family: var(--font-display), Georgia, serif; font-size: clamp(38px, 5vw, 58px); font-weight: 400; line-height: 1.05; }
+.patient-profile-form { max-width: 680px; display: grid; gap: 17px; margin-top: 30px; }
+.patient-profile-form label { display: grid; gap: 7px; color: #3d524b; font-size: 11px; font-weight: 700; }
+.patient-profile-form input, .patient-profile-form textarea { width: 100%; min-height: 43px; padding: 10px 11px; border: 1px solid #c8d6cc; border-radius: 0; background: #fff; color: #18352f; font: inherit; font-size: 13px; }
+.patient-profile-form textarea { resize: vertical; }
+.patient-profile-form input:focus-visible, .patient-profile-form textarea:focus-visible { outline: 3px solid #e96f56; outline-offset: 2px; }
+.patient-profile-form .admin-submit { justify-self: start; min-width: 180px; padding-inline: 18px; }
+.patient-profile-success { margin: 0; color: #23624d; font-size: 12px; font-weight: 700; }
+
 @media (max-width: 760px) {
 	.admin-count-strip { grid-template-columns: 1fr; }
 	.admin-count-strip > div + div { border-top: 1px solid #dce5dd; border-left: 0; }
 	.admin-record-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.patient-dashboard-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {

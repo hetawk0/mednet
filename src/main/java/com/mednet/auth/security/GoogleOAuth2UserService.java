@@ -52,6 +52,11 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
     @Transactional
     public OAuth2User loadUser(OAuth2UserRequest request) throws OAuth2AuthenticationException {
         OAuth2User googleUser = delegate.loadUser(request);
+        return applyMedNetRole(googleUser);
+    }
+
+    @Transactional
+    public OAuth2User applyMedNetRole(OAuth2User googleUser) {
         String email = googleUser.getAttribute("email");
         String subject = googleUser.getAttribute("sub");
         Boolean emailVerified = googleUser.getAttribute("email_verified");
@@ -70,6 +75,7 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         }
 
         Set<GrantedAuthority> authorities = new HashSet<>(googleUser.getAuthorities());
+        authorities.removeIf(authority -> authority.getAuthority().equals("ROLE_USER"));
         authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
         return new DefaultOAuth2User(authorities, googleUser.getAttributes(), "sub");
     }

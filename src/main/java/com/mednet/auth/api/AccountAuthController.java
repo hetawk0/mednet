@@ -59,7 +59,6 @@ public class AccountAuthController {
     }
 
     @PostMapping("/register")
-    @Transactional
     public ResponseEntity<MessageResponse> register(@Valid @RequestBody CredentialsRequest request) {
         String normalizedEmail = normalize(request.email());
         validatePassword(request.password());
@@ -71,18 +70,19 @@ public class AccountAuthController {
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(genericResponse());
         }
         account.setPasswordHash(passwordEncoder.encode(request.password()));
-        sendVerification(account);
-        accounts.save(account);
+        if (!sendVerification(account)) {
+            return verificationDeliveryFailure();
+        }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(genericResponse());
     }
 
     @PostMapping("/resend-verification")
-    @Transactional
     public ResponseEntity<MessageResponse> resendVerification(@Valid @RequestBody EmailRequest request) {
         PlatformAccountEntity account = accounts.findFirstByEmailIgnoreCase(normalize(request.email())).orElse(null);
         if (account != null && !account.isEmailVerified()) {
-            sendVerification(account);
-            accounts.save(account);
+            if (!sendVerification(account)) {
+                return verificationDeliveryFailure();
+            }
         }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(genericResponse());
     }
@@ -184,11 +184,12 @@ public class AccountAuthController {
         return new MessageResponse("Password updated. You can now sign in.");
     }
 
-    private void sendVerification(PlatformAccountEntity account) {
+    private boolean sendVerification(PlatformAccountEntity account) {
         IssuedToken token = tokens.issue(VERIFICATION_LIFETIME);
         account.setVerificationToken(token.hash(), token.expiresAt());
+        accounts.save(account);
         String link = publicUrl + "/verify?email=" + encode(account.getEmail()) + "&token=" + encode(token.raw());
-        email.send(account.getEmail(), "Verify your MedNet email",
+        return email.send(account.getEmail(), "Verify your MedNet email",
                 "<p>Confirm your MedNet email:</p><p><a href=\"" + link + "\">Verify email</a></p>",
                 "Verify your MedNet email: " + link);
     }
@@ -212,6 +213,11 @@ public class AccountAuthController {
 
     private static MessageResponse genericResponse() {
         return new MessageResponse("If the account can receive this message, instructions have been sent.");
+    }
+
+    private static ResponseEntity<MessageResponse> verificationDeliveryFailure() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new MessageResponse("Verification email could not be sent. Please try again shortly."));
     }
 
     private static ResponseEntity<ResetVerificationResponse> invalidResetCode() {

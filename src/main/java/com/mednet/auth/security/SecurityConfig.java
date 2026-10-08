@@ -168,12 +168,22 @@ public class SecurityConfig {
             http.oauth2Login(oauth2 -> oauth2
                     .authorizationEndpoint(endpoint -> endpoint.baseUri("/api/v1/auth/oauth2/authorization"))
                     .redirectionEndpoint(endpoint -> endpoint.baseUri("/api/v1/auth/oauth2/callback/*"))
-                    .userInfoEndpoint(endpoint -> endpoint.userService(configuredUserService))
+                    .userInfoEndpoint(endpoint -> endpoint.oidcUserService(
+                            new GoogleOidcUserService(configuredUserService)))
                     .successHandler((request, response, authentication) -> {
-                        boolean isAdmin = authentication.getAuthorities().stream()
-                                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN")
-                                        || authority.getAuthority().equals("ROLE_SUPER_ADMIN"));
-                        response.sendRedirect(isAdmin ? "/admin" : "/account");
+                        String role = authentication.getAuthorities().stream()
+                                .map(authority -> authority.getAuthority())
+                                .filter(authority -> authority.startsWith("ROLE_"))
+                                .map(authority -> authority.substring("ROLE_".length()))
+                                .filter(authority -> !authority.equals("USER"))
+                                .findFirst()
+                                .orElse("USER");
+                        String destination = switch (role) {
+                            case "ADMIN", "SUPER_ADMIN" -> "/admin";
+                            case "PATIENT" -> "/patient";
+                            default -> "/account";
+                        };
+                        response.sendRedirect(destination);
                     })
                     .failureHandler((request, response, exception) -> {
                         if (exception instanceof OAuth2AuthenticationException oauthException) {

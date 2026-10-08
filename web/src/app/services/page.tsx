@@ -15,36 +15,42 @@ const services = [
     "Patient and provider accounts",
     "Manage patient accounts and provider profiles, including professional information and specialties.",
     "Accounts",
+    "accounts",
   ],
   [
     "02",
     "Find a provider",
     "Search provider profiles by specialty and services offered.",
     "Provider directory",
+    "providers",
   ],
   [
     "03",
     "Appointments and messages",
     "Request appointments, follow updates, and communicate with providers.",
     "Care coordination",
+    "appointments",
   ],
   [
     "04",
     "Health records and medications",
     "Keep health information together and manage medication schedules and reminders.",
     "Care information",
+    "health-information",
   ],
   [
     "05",
     "Vitals and service requests",
     "Record vitals and request home healthcare or laboratory services.",
     "Care services",
+    "service-requests",
   ],
   [
     "06",
     "Virtual consultations and updates",
     "Join virtual consultations and receive notifications about appointments and requests.",
     "Care coordination",
+    "consultations",
   ],
 ];
 
@@ -69,8 +75,8 @@ export default function ServicesPage() {
           </p>
         </div>
         <div className="roadmap-list">
-          {services.map(([number, name, description, stage]) => (
-            <article className="roadmap-item" key={number}>
+          {services.map(([number, name, description, stage, id]) => (
+            <article className="roadmap-item" id={id} key={number}>
               <span className="service-number">{number}</span>
               <div>
                 <span className="roadmap-stage">{stage}</span>

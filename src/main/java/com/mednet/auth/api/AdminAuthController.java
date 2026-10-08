@@ -46,6 +46,7 @@ public class AdminAuthController {
                 .map(authority -> authority.getAuthority())
                 .filter(authority -> authority.startsWith("ROLE_"))
                 .map(authority -> authority.substring("ROLE_".length()))
+                .filter(authority -> !authority.equals("USER"))
                 .findFirst()
                 .orElse("USER");
     }

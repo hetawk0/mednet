@@ -9,34 +9,39 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Service
 public class EkdSendEmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EkdSendEmailService.class);
+    private static final String DEFAULT_API_URL = "https://es.ekddigital.com/api/v1";
+    private static final String DEFAULT_FROM = "support@ekddigital.com";
     private final RestClient client;
     private final String apiKey;
     private final String from;
 
     public EkdSendEmailService(
-            @Value("${EKDSEND_API_URL:}") String apiUrl,
+            @Value("${EKDSEND_API_URL:https://es.ekddigital.com/api/v1}") String apiUrl,
             @Value("${EKDSEND_API_KEY:}") String apiKey,
-            @Value("${FROM_EMAIL:${EKDSEND_FROM:}}") String from) {
+            @Value("${FROM_EMAIL:${EKDSEND_FROM:support@ekddigital.com}}") String from) {
+        String configuredApiUrl = apiUrl == null || apiUrl.isBlank() ? DEFAULT_API_URL : apiUrl.trim();
         this.client = RestClient.builder()
-                .baseUrl(apiUrl == null ? "" : apiUrl.replaceAll("/$", ""))
+                .baseUrl(configuredApiUrl.replaceAll("/+$", ""))
                 .build();
         this.apiKey = apiKey == null ? "" : apiKey.trim();
-        this.from = from == null ? "" : from.trim();
+        this.from = from == null || from.isBlank() ? DEFAULT_FROM : from.trim();
     }
 
     public boolean send(String to, String subject, String html, String text) {
-        if (apiKey.isBlank() || from.isBlank()) {
+        if (apiKey.isBlank()) {
             log.warn("EKDSend email is not configured; message was not sent");
             return false;
         }
         try {
             client.post()
                     .uri("/send")
+                    .header("x-api-key", apiKey)
                     .header("Authorization", "Bearer " + apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of(
@@ -44,13 +49,17 @@ public class EkdSendEmailService {
                             "to", to,
                             "from", from,
                             "subject", subject,
+                            "html", html,
                             "body", html,
                             "text", text))
                     .retrieve()
                     .toBodilessEntity();
             return true;
+        } catch (RestClientResponseException exception) {
+            log.warn("EKDSend rejected an email request with HTTP {}", exception.getStatusCode().value());
+            return false;
         } catch (RestClientException exception) {
-            log.warn("EKDSend rejected an email request: {}", exception.getMessage());
+            log.warn("EKDSend email request failed ({})", exception.getClass().getSimpleName());
             return false;
         }
     }

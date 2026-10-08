@@ -19,6 +19,8 @@ import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.provider.data.ProviderApplicationRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -74,8 +76,37 @@ class GoogleOAuth2UserServiceTests {
         assertThat(authenticatedUser.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority).toList())
                 .contains("ROLE_SUPER_ADMIN");
+        assertThat(authenticatedUser.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority).toList())
+                .doesNotContain("ROLE_USER");
         assertThat(account.getAccountType()).isEqualTo("SUPER_ADMIN");
         verify(accounts).saveAndFlush(account);
+    }
+
+    @Test
+    void newGoogleAccountIsPersistedAsPatientAndGetsOnlyTheMedNetRole() {
+        PlatformAccountRepository accounts = mock(PlatformAccountRepository.class);
+        ProviderApplicationRepository providers = mock(ProviderApplicationRepository.class);
+        OAuth2UserService<OAuth2UserRequest, OAuth2User> delegate = mock(OAuth2UserService.class);
+        OAuth2UserRequest request = mock(OAuth2UserRequest.class);
+        String email = "new-patient@example.test";
+        when(delegate.loadUser(request)).thenReturn(googleUser(email));
+        when(providers.findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(email, "APPROVED"))
+                .thenReturn(Optional.empty());
+        when(accounts.findFirstByGoogleSubject("google-subject")).thenReturn(Optional.empty());
+        when(accounts.findFirstByEmailIgnoreCase(email)).thenReturn(Optional.empty());
+        when(accounts.saveAndFlush(any(PlatformAccountEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        GoogleOAuth2UserService service =
+                new GoogleOAuth2UserService(accounts, providers, "root@example.test", delegate);
+
+        OAuth2User authenticatedUser = service.loadUser(request);
+
+        assertThat(authenticatedUser.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority).toList())
+                .containsExactly("ROLE_PATIENT");
+        verify(accounts).saveAndFlush(argThat(account -> account.getAccountType().equals("PATIENT")));
     }
 
     @Test
