@@ -184,6 +184,7 @@ or no-show fields while their product decisions remain open.
 - Following the user-approved OQ-02 decision, administrators can provision individual `HOME_CARE` and `LABORATORY` accounts and assign matching open requests to verified staff. Staff can list only requests assigned to their account, see only the service description and (for home care) location needed for the task, and update status within role-specific transitions. Home-care staff may mark an in-progress request resolved. Assigned laboratory staff can submit text-only results; an approved provider with the patient's active consent and care relationship must release a result before it is returned to the patient and appended to the record. This review gate is a conservative safeguard pending sponsor/legal confirmation. This is manual assignment, not external routing or facility organization management.
 - Virtual consultations are not enabled because there is no approved consultation mode, external real-time service, recording/retention policy, or connection-failure workflow (OQ-20–OQ-23).
 - The admin overview includes active/open request counts and indicates partial or disabled modules; it does not expose clinical payloads.
+- `GET /api/v1/admin/appointments` provides a paginated operations view with opaque participant IDs, appointment times and status only. It excludes names and clinical notes and audits each access.
 
 ---
 

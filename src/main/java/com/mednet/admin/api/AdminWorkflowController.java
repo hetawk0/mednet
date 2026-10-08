@@ -25,6 +25,8 @@ import com.mednet.admin.data.AdminWorkflowModels.AdminAuditEvent;
 import com.mednet.admin.data.AdminWorkflowModels.PlatformAccount;
 import com.mednet.admin.data.AdminWorkflowModels.ProviderApplication;
 import com.mednet.admin.data.AdminWorkflowModels.ServiceRequest;
+import com.mednet.appointment.app.AppointmentService;
+import com.mednet.appointment.app.AppointmentService.AdminAppointmentSummary;
 
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -32,9 +34,19 @@ import com.mednet.admin.data.AdminWorkflowModels.ServiceRequest;
 public class AdminWorkflowController {
 
     private final AdminWorkflowService service;
+    private final AppointmentService appointments;
 
-    public AdminWorkflowController(AdminWorkflowService service) {
+    public AdminWorkflowController(AdminWorkflowService service, AppointmentService appointments) {
         this.service = service;
+        this.appointments = appointments;
+    }
+
+    @GetMapping("/appointments")
+    public Page<AdminAppointmentSummary> appointments(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication actor) {
+        return appointments.adminList(actorEmail(actor), page, size);
     }
 
     @GetMapping("/providers")

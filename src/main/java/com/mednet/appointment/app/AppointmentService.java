@@ -108,6 +108,30 @@ public class AppointmentService {
                 .map(this::details);
     }
 
+    @Transactional
+    public Page<AdminAppointmentSummary> adminList(String actorEmail, int page, int size) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 100);
+        Page<AdminAppointmentSummary> result = appointments
+                .findAll(PageRequest.of(
+                        safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .map(appointment -> {
+                    ProviderAvailabilitySlotEntity slot = slots.findById(appointment.getAvailabilitySlotId())
+                            .orElseThrow(AppointmentService::notFound);
+                    return new AdminAppointmentSummary(
+                            appointment.getId(),
+                            appointment.getPatientAccountId(),
+                            appointment.getProviderApplicationId(),
+                            appointment.getStatus(),
+                            slot.getStartsAt(),
+                            slot.getEndsAt(),
+                            appointment.getCreatedAt(),
+                            appointment.getUpdatedAt());
+                });
+        audit(actorEmail, "appointment.admin_list_accessed", "admin_list");
+        return result;
+    }
+
     @Transactional(readOnly = true)
     public AppointmentDetails get(String actorEmail, String role, String appointmentId) {
         AppointmentEntity appointment = appointments.findById(appointmentId)
@@ -353,6 +377,17 @@ public class AppointmentService {
             Instant endsAt,
             Instant proposedStartsAt,
             Instant proposedEndsAt,
+            Instant createdAt,
+            Instant updatedAt) {
+    }
+
+    public record AdminAppointmentSummary(
+            String id,
+            String patientAccountId,
+            String providerApplicationId,
+            String status,
+            Instant startsAt,
+            Instant endsAt,
             Instant createdAt,
             Instant updatedAt) {
     }

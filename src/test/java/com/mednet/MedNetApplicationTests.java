@@ -477,6 +477,23 @@ class MedNetApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(2));
 
+        MvcResult adminAppointments = mockMvc.perform(get("/api/v1/admin/appointments")
+                .param("page", "0")
+                .param("size", "100")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andReturn();
+        var adminAppointmentRows = objectMapper.readTree(adminAppointments.getResponse().getContentAsString())
+                .get("content");
+        var adminAppointment = java.util.stream.StreamSupport.stream(
+                        adminAppointmentRows.spliterator(), false)
+                .filter(row -> appointmentId.equals(row.get("id").asText()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(adminAppointment.has("patientName")).isFalse();
+        assertThat(adminAppointment.has("providerName")).isFalse();
+        assertThat(adminAppointment.has("status")).isTrue();
+
         assertThat(appointments.findById(appointmentId).orElseThrow().getStatus()).isEqualTo("CANCELLED");
     }
 
