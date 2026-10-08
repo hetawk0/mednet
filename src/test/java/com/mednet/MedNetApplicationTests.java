@@ -1344,6 +1344,11 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api/v1/auth/admin/session").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("SUPER_ADMIN"));
+
+        mockMvc.perform(get("/api/v1/auth/admin/session")
+                .with(user("administrator@example.test").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("ADMIN"));
     }
 
     @Test

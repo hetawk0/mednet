@@ -222,7 +222,7 @@ public class AccountAuthController {
 
     private static MessageResponse registrationResponse() {
         return new MessageResponse(
-                "Thanks for signing up. If this email is eligible for a new MedNet account, a verification link will arrive shortly. Already registered? Sign in or reset your password.");
+                "Thanks for signing up. If this email is eligible for a new MedNet account, a verification link will arrive shortly. If you do not receive it, choose Resend verification email on the sign-in page.");
     }
 
     private static MessageResponse resendVerificationResponse() {

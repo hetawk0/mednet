@@ -3,7 +3,12 @@
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 
-type AccessState = "checking" | "signed-out" | "signed-in";
+type AccessState =
+  | "checking"
+  | "signed-out"
+  | "forbidden"
+  | "unavailable"
+  | "signed-in";
 
 type AdminSession = {
   email: string;
@@ -124,18 +129,64 @@ export function AdminPortal() {
           credentials: "same-origin",
         });
         if (!active) return;
-        if (!response.ok) {
+        if (response.status === 401) {
+          setError(
+            "Your administrator session is no longer active. Sign in again to continue.",
+          );
           setAccess("signed-out");
+          return;
+        }
+        if (response.status === 403) {
+          setError(
+            "This session does not have administrator access. Sign in with an ADMIN or SUPER_ADMIN account.",
+          );
+          setAccess("forbidden");
+          return;
+        }
+        if (!response.ok) {
+          setError(
+            `The MedNet API could not verify your administrator session (${response.status}).`,
+          );
+          setAccess("unavailable");
           return;
         }
 
         const currentSession = (await response.json()) as AdminSession;
+        if (
+          currentSession.role !== "ADMIN" &&
+          currentSession.role !== "SUPER_ADMIN"
+        ) {
+          setError(
+            "This session does not have administrator access. Sign in with an ADMIN or SUPER_ADMIN account.",
+          );
+          setAccess("forbidden");
+          return;
+        }
         const overviewResponse = await fetch("/api/v1/admin/overview", {
           cache: "no-store",
           credentials: "same-origin",
         });
+        if (overviewResponse.status === 401) {
+          setError(
+            "Your administrator session is no longer active. Sign in again to continue.",
+          );
+          setAccess("signed-out");
+          return;
+        }
+        if (overviewResponse.status === 403) {
+          setError(
+            "Your account is signed in, but does not have permission to open the administration console.",
+          );
+          setAccess("forbidden");
+          return;
+        }
         if (!overviewResponse.ok) {
-          throw new Error("The admin API could not be reached.");
+          setError(
+            `Your administrator session is valid, but the MedNet API could not load the console (${overviewResponse.status}).`,
+          );
+          setSession(currentSession);
+          setAccess("unavailable");
+          return;
         }
 
         const currentOverview =
@@ -147,7 +198,7 @@ export function AdminPortal() {
       } catch {
         if (!active) return;
         setError("The MedNet API is unavailable. Try again shortly.");
-        setAccess("signed-out");
+        setAccess("unavailable");
       }
     }
 
@@ -456,20 +507,99 @@ export function AdminPortal() {
             <p className="admin-eyebrow">Restricted access</p>
             <h1>Administration is protected.</h1>
             <p>
-              Use the shared MedNet sign-in to authenticate. Only accounts with
-              the administrator role can enter this console.
+              Your administrator session is no longer active. Sign in again
+              with an ADMIN or SUPER_ADMIN account to continue.
             </p>
           </div>
-          <div className="admin-login-form">
+          <div className="admin-access-card">
             {error && (
               <p className="admin-error" role="alert">
                 {error}
               </p>
             )}
-            <Link className="admin-submit" href="/sign-in?redirect=/admin">
-              Go to secure sign in
+            <span className="admin-access-card-label">Administrator access</span>
+            <h2>Continue to your workspace</h2>
+            <p>
+              Sign in securely to return to platform operations. Your
+              administrator permissions will be checked automatically.
+            </p>
+            <Link
+              className="admin-access-button"
+              href="/sign-in?redirect=%2Fadmin"
+            >
+              <span>Sign in to administration</span>
+              <span aria-hidden="true">→</span>
             </Link>
-            <Link className="admin-google-link" href="/">
+            <Link className="admin-access-secondary" href="/">
+              Return to public site
+            </Link>
+          </div>
+        </section>
+      ) : access === "forbidden" ? (
+        <section className="admin-login-layout">
+          <div className="admin-login-intro">
+            <p className="admin-eyebrow">Administrator access</p>
+            <h1>This account cannot open the console.</h1>
+            <p>
+              The signed-in account does not have an administrator role. Both
+              ADMIN and SUPER_ADMIN accounts are supported.
+            </p>
+          </div>
+          <div className="admin-access-card">
+            {error && (
+              <p className="admin-error" role="alert">
+                {error}
+              </p>
+            )}
+            <span className="admin-access-card-label">Access not granted</span>
+            <h2>Check the account you used</h2>
+            <p>
+              Sign out of the current account, then sign in with an
+              administrator account.
+            </p>
+            <Link
+              className="admin-access-button"
+              href="/sign-in?redirect=%2Fadmin"
+            >
+              <span>Choose another account</span>
+              <span aria-hidden="true">→</span>
+            </Link>
+            <Link className="admin-access-secondary" href="/">
+              Return to public site
+            </Link>
+          </div>
+        </section>
+      ) : access === "unavailable" ? (
+        <section className="admin-login-layout">
+          <div className="admin-login-intro">
+            <p className="admin-eyebrow">Connection issue</p>
+            <h1>Your admin session is being checked.</h1>
+            <p>
+              We could not reach the MedNet administration API. This does not
+              mean your account has lost its administrator access.
+            </p>
+          </div>
+          <div className="admin-access-card">
+            {error && (
+              <p className="admin-error" role="alert">
+                {error}
+              </p>
+            )}
+            <span className="admin-access-card-label">MedNet services</span>
+            <h2>Try the connection again</h2>
+            <p>
+              Your ADMIN or SUPER_ADMIN access will be verified when the API is
+              available.
+            </p>
+            <button
+              className="admin-access-button"
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              <span>Retry connection</span>
+              <span aria-hidden="true">↻</span>
+            </button>
+            <Link className="admin-access-secondary" href="/">
               Return to public site
             </Link>
           </div>

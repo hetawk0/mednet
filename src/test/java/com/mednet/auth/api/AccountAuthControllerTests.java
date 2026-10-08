@@ -48,6 +48,7 @@ class AccountAuthControllerTests {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         assertThat(response.getBody().message())
                 .contains("verification link will arrive shortly")
+                .contains("Resend verification email")
                 .doesNotContain("submit these details again");
         verify(accounts).save(argThat(account -> account.getAccountType().equals("PATIENT")
                 && account.getVerificationTokenHash().equals("hashed-verification-token")));

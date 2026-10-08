@@ -176,7 +176,7 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
         const result = (await response.json()) as { message?: string };
         setMessage(
           result.message ??
-            "If this email is eligible for a new MedNet account, a verification link will arrive shortly.",
+            "We’ve received your request. If a new account can be created for this email, we’ll send a verification link. You can request another link below.",
         );
         setEmailInput(email);
         setMode("login");
@@ -347,9 +347,57 @@ export function GoogleSignIn({ googleError }: { googleError: boolean }) {
                 {error}
               </p>
             )}
+            {mode === "login" && error && (
+              <div className="admin-verification-help">
+                <p>
+                  If your email is not verified yet, you can request a fresh
+                  verification link. Email verification uses a link, not a
+                  numeric code.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setMessage("");
+                    setMode("resend");
+                  }}
+                >
+                  Resend verification link
+                  <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            )}
             {message && (
-              <p className="admin-form-note" role="status">
-                {message}
+              <>
+                <p className="admin-form-note" role="status">
+                  {message}
+                </p>
+                {mode === "login" && (
+                  <div className="admin-verification-help">
+                    <p>
+                      Didn&apos;t receive the verification email? You can request a
+                      new link.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setMessage("");
+                        setMode("resend");
+                      }}
+                    >
+                      Resend verification link
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            {mode === "resend" && (
+              <p className="admin-verification-note">
+                Verification is completed using an email link, not a code. If
+                this address has an account awaiting verification, we’ll send a
+                fresh link.
               </p>
             )}
             <button className="admin-submit" type="submit" disabled={busy}>

@@ -274,6 +274,16 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .admin-login-layout { width: min(960px, calc(100% - 48px)); min-height: calc(100vh - 76px); display: grid; grid-template-columns: 1fr minmax(280px, .72fr); align-items: center; gap: 80px; margin: 0 auto; padding: 70px 0; }
 .admin-login-intro { max-width: 500px; }
 .admin-login-form { display: grid; gap: 11px; padding: 26px; border: 1px solid #dce5dd; background: #fff; }
+.admin-access-card { display: grid; gap: 13px; padding: 32px; border: 1px solid #dce5dd; background: #fff; box-shadow: 0 18px 48px rgb(21 63 52 / 6%); }
+.admin-access-card-label { color: #23624d; font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.admin-access-card h2 { margin: 0; color: #18352f; font-family: var(--font-display), Georgia, serif; font-size: 27px; font-weight: 400; line-height: 1.15; }
+.admin-access-card > p:not(.admin-error) { margin: 0; color: #6d7e76; font-size: 15px; line-height: 1.65; }
+.admin-access-button { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; padding: 0 17px; border: 0; background: #153f34; color: #fff; font: inherit; font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; transition: background-color 160ms ease, transform 160ms ease; }
+.admin-access-button:hover { transform: translateY(-1px); background: #23624d; }
+.admin-access-button:focus-visible { outline: 3px solid #e96f56; outline-offset: 3px; }
+.admin-access-button span:last-child { color: #d8ed9e; font-size: 20px; }
+.admin-access-secondary { justify-self: center; margin-top: 3px; color: #23624d; font-size: 14px; font-weight: 700; text-underline-offset: 4px; }
+.admin-access-secondary:hover { color: #153f34; text-decoration: underline; }
 .admin-auth-modes { display: flex; gap: 4px; margin: -4px 0 8px; border-bottom: 1px solid var(--line); }
 .admin-auth-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 14px; }
 .admin-auth-mode { min-height: 34px; padding: 0 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
@@ -304,6 +314,13 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .google-mark { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #4285f4; font-size: 13px; font-weight: 700; }
 .admin-account-role { margin-top: 10px; color: #6d7e76; font-size: 13px; }
 .admin-form-note { margin: 5px 0 0; color: #6d7e76; font-size: 10px; line-height: 1.6; }
+.admin-verification-help { display: grid; gap: 8px; padding: 13px 14px; border: 1px solid #dce5dd; background: #f5f8f3; }
+.admin-verification-help p, .admin-verification-note { margin: 0; color: #52665d; font-size: 13px; line-height: 1.6; }
+.admin-verification-help button { justify-self: start; display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: transparent; color: #23624d; font: inherit; font-size: 14px; font-weight: 700; text-align: left; cursor: pointer; }
+.admin-verification-help button:hover { color: #153f34; text-decoration: underline; text-underline-offset: 3px; }
+.admin-verification-help button:focus-visible { outline: 2px solid #e96f56; outline-offset: 3px; }
+.admin-verification-help button span { color: #e96f56; font-size: 17px; }
+.admin-verification-note { padding: 12px 13px; border-left: 3px solid #23624d; background: #f5f8f3; }
 .admin-error { margin: 0; color: #a34e3d; font-size: 12px; line-height: 1.6; }
 .admin-state { width: min(1120px, calc(100% - 48px)); margin: 70px auto; color: #6d7e76; font-size: 13px; }
 .admin-layout { width: min(1280px, calc(100% - 48px)); display: grid; grid-template-columns: 210px minmax(0, 1fr); align-items: start; gap: 42px; margin: 0 auto; }
