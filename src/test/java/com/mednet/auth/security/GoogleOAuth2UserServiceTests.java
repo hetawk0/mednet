@@ -5,6 +5,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
@@ -22,6 +24,33 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class GoogleOAuth2UserServiceTests {
+
+    @ParameterizedTest
+    @ValueSource(strings = { "LABORATORY", "HOME_CARE" })
+    void googleSignInPreservesPartnerRoles(String partnerRole) {
+        PlatformAccountRepository accounts = mock(PlatformAccountRepository.class);
+        ProviderApplicationRepository providers = mock(ProviderApplicationRepository.class);
+        OAuth2UserService<OAuth2UserRequest, OAuth2User> delegate = mock(OAuth2UserService.class);
+        OAuth2UserRequest request = mock(OAuth2UserRequest.class);
+        String email = "staff@example.test";
+        PlatformAccountEntity account = new PlatformAccountEntity("account-1", email, partnerRole);
+        when(delegate.loadUser(request)).thenReturn(googleUser(email));
+        when(providers.findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(email, "APPROVED"))
+                .thenReturn(Optional.empty());
+        when(accounts.findFirstByGoogleSubject("google-subject")).thenReturn(Optional.empty());
+        when(accounts.findFirstByEmailIgnoreCase(email)).thenReturn(Optional.of(account));
+        when(accounts.saveAndFlush(account)).thenReturn(account);
+
+        OAuth2UserService<OAuth2UserRequest, OAuth2User> service =
+                new GoogleOAuth2UserService(accounts, providers, "root@example.test", delegate);
+
+        OAuth2User authenticatedUser = service.loadUser(request);
+
+        assertThat(authenticatedUser.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority).toList())
+                .contains("ROLE_" + partnerRole);
+        assertThat(account.getAccountType()).isEqualTo(partnerRole);
+    }
 
     @Test
     void googleSignInDoesNotDowngradeAnAdministratorRole() {

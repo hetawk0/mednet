@@ -91,7 +91,7 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         }
 
         String role = switch (account.getAccountType()) {
-            case "ADMIN", "SUPER_ADMIN" -> account.getAccountType();
+            case "ADMIN", "SUPER_ADMIN", "LABORATORY", "HOME_CARE" -> account.getAccountType();
             default -> providerApproved ? "PROVIDER" : "PATIENT";
         };
         account.linkGoogleSubject(subject);
