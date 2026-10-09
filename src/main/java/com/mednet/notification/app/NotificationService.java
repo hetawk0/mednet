@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.context.event.EventListener;
 
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
@@ -35,6 +37,12 @@ public class NotificationService {
         this.configuredAdminEmail = configuredAdminEmail == null
                 ? ""
                 : configuredAdminEmail.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void provisionConfiguredAdministrator() {
+        ensureConfiguredAdministratorAccount();
     }
 
     @Transactional
@@ -126,14 +134,10 @@ public class NotificationService {
         if (account == null) {
             account = new PlatformAccountEntity(
                     UUID.randomUUID().toString(), configuredAdminEmail, "SUPER_ADMIN");
-            account.verifyEmail();
-            account = accounts.saveAndFlush(account);
+            account = accounts.save(account);
         }
-        if (!"SUPER_ADMIN".equals(account.getAccountType()) || !"ACTIVE".equals(account.getStatus())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "The configured administrator email must belong to an active SUPER_ADMIN account");
-        }
+        account.changeAccountType("SUPER_ADMIN");
+        account.changeStatus("ACTIVE");
         if (!account.isEmailVerified()) {
             account.verifyEmail();
         }

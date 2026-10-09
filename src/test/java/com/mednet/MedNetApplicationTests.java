@@ -49,6 +49,7 @@ import com.mednet.record.data.PatientProviderRecordConsentRepository;
 import com.mednet.medication.app.MedicationService;
 import com.mednet.medication.data.MedicationScheduleEntity;
 import com.mednet.medication.data.MedicationScheduleRepository;
+import com.mednet.notification.app.NotificationService;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -112,6 +113,9 @@ class MedNetApplicationTests {
     private PlatformAccountRepository accounts;
 
     @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
     private PatientProfileRepository patientProfiles;
 
     @Autowired
@@ -165,6 +169,22 @@ class MedNetApplicationTests {
         assertThat(dataSource.getMinimumIdle()).isEqualTo(1);
         assertThat(flyway.getConfiguration().getConnectRetries()).isEqualTo(10);
         assertThat(flyway.getConfiguration().getConnectRetriesInterval()).isEqualTo(2);
+    }
+
+    @Test
+    void configuredAdministratorIsProvisionedAsActiveVerifiedSuperAdmin() {
+        PlatformAccountEntity administrator = accounts.findFirstByEmailIgnoreCase(ADMIN_EMAIL).orElseThrow();
+        administrator.changeAccountType("PATIENT");
+        administrator.changeStatus("SUSPENDED");
+        accounts.saveAndFlush(administrator);
+
+        notificationService.provisionConfiguredAdministrator();
+
+        administrator = accounts.findFirstByEmailIgnoreCase(ADMIN_EMAIL).orElseThrow();
+
+        assertThat(administrator.getAccountType()).isEqualTo("SUPER_ADMIN");
+        assertThat(administrator.getStatus()).isEqualTo("ACTIVE");
+        assertThat(administrator.isEmailVerified()).isTrue();
     }
 
     @Test
