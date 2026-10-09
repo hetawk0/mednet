@@ -191,10 +191,11 @@ public class AdminWorkflowService {
         String nextName = requireDisplayName(displayName);
         String nextPassword = password == null || password.isBlank() ? null : requirePassword(password);
         boolean emailChanged = !entity.getEmail().equalsIgnoreCase(normalizedEmail);
-        if (!entity.getAccountType().equals(nextType) && hasProtectedAccountData(entity)) {
+        boolean roleChanged = !entity.getAccountType().equals(nextType);
+        if (roleChanged && hasProtectedAccountData(entity)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Accounts linked to profiles, care workflows, provider applications, or clinical records cannot change account type");
+                    "This account is linked to existing records, so its account type cannot be changed. Other account details can still be updated.");
         }
         if (emailChanged && entity.getGoogleSubject() != null && nextPassword == null) {
             throw new ResponseStatusException(
@@ -267,7 +268,8 @@ public class AdminWorkflowService {
     private void requireNotConfiguredAdmin(PlatformAccountEntity account) {
         if (!configuredAdminEmail.isBlank() && configuredAdminEmail.equalsIgnoreCase(account.getEmail())) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "The configured administrator account cannot be modified or deleted");
+                    HttpStatus.CONFLICT,
+                    "The configured administrator account is managed through MEDNET_ADMIN_EMAIL and MEDNET_ADMIN_PASSWORD environment settings.");
         }
     }
 

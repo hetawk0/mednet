@@ -1486,6 +1486,16 @@ class MedNetApplicationTests {
                 .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
                 .with(csrf()))
                 .andExpect(status().isConflict());
+        mockMvc.perform(put("/api/v1/admin/accounts/{id}", configuredAdmin.getId())
+                .with(user("another-super-admin@example.test").roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"displayName":"Changed Admin","email":"%s","accountType":"SUPER_ADMIN"}
+                        """.formatted(ADMIN_EMAIL)))
+                .andExpect(status().isConflict())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "MEDNET_ADMIN_EMAIL and MEDNET_ADMIN_PASSWORD")));
     }
 
     @Test
@@ -1659,6 +1669,50 @@ class MedNetApplicationTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"emailVerified\":false}"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void superAdminCanEditLinkedAccountDetailsButCannotChangeItsRole() throws Exception {
+        MvcResult created = mockMvc.perform(post("/api/v1/admin/accounts")
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"displayName":"Linked Patient","email":"linked-patient@example.test","accountType":"PATIENT","password":"Linked-Patient-Password-2026"}
+                        """))
+                .andExpect(status().isOk())
+                .andReturn();
+        String accountId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("id").asText();
+        patientProfiles.saveAndFlush(new PatientProfileEntity(
+                UUID.randomUUID().toString(),
+                accountId,
+                "Linked Patient",
+                LocalDate.of(1990, 1, 1),
+                "+231000000000",
+                "Monrovia"));
+
+        mockMvc.perform(put("/api/v1/admin/accounts/{id}", accountId)
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"displayName":"Updated Patient","email":"linked-patient@example.test","accountType":"PATIENT"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayName").value("Updated Patient"))
+                .andExpect(jsonPath("$.accountType").value("PATIENT"));
+
+        mockMvc.perform(put("/api/v1/admin/accounts/{id}", accountId)
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"displayName":"Updated Patient","email":"linked-patient@example.test","accountType":"PROVIDER"}
+                        """))
+                .andExpect(status().isConflict())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "account type cannot be changed")));
     }
 
 }

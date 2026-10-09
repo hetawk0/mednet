@@ -80,6 +80,22 @@ type CsrfResponse = {
   token: string;
 };
 
+async function responseErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  const payload: unknown = await response.json().catch(() => null);
+  if (typeof payload !== "object" || payload === null) return fallback;
+  const body = payload as Record<string, unknown>;
+  const message =
+    typeof body.detail === "string"
+      ? body.detail
+      : typeof body.message === "string"
+        ? body.message
+        : null;
+  return message?.trim() || fallback;
+}
+
 const moduleLabels: Record<string, string> = {
   providerReview: "Provider applications",
   accountSupport: "User management",
@@ -382,12 +398,13 @@ export function AdminPortal() {
           ? "Only a SUPER_ADMIN can change account roles."
           : "Your administrator account does not have permission for this action.",
       );
-    if (response.status === 409)
-      throw new Error(
+    if (response.status === 409) {
+      const fallback =
         method === "POST" && path === "accounts"
           ? "An account with this email already exists."
-          : "This account is protected or cannot be changed while linked to existing records.",
-      );
+          : "This account conflicts with an existing account or protected record.";
+      throw new Error(await responseErrorMessage(response, fallback));
+    }
     if (!response.ok)
       throw new Error(`Admin operation failed (${response.status}).`);
   }
@@ -533,7 +550,10 @@ export function AdminPortal() {
         throw new Error("Only a SUPER_ADMIN can delete accounts.");
       if (response.status === 409)
         throw new Error(
-          "This account is protected because it is linked to clinical or care records.",
+          await responseErrorMessage(
+            response,
+            "This account conflicts with an existing account or protected record.",
+          ),
         );
       if (!response.ok)
         throw new Error(
@@ -1142,6 +1162,10 @@ function AdminWorkspace({
               reactivate accounts; only SUPER_ADMIN can edit account details,
               verification, roles, and deletion. Public account IDs are short,
               type-prefixed identifiers; internal database IDs are not shown.
+              Linked records prevent account-type changes or deletion, but do
+              not prevent editing other account details. The environment-
+              configured administrator must be changed through deployment
+              settings.
             </p>
             <form
               className="admin-record-form"
