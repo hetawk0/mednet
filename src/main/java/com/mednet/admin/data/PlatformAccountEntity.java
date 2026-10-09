@@ -17,6 +17,9 @@ public class PlatformAccountEntity {
     @Column(length = 36)
     private String id;
 
+    @Column(name = "public_id", nullable = false, unique = true, length = 15, updatable = false)
+    private String publicId;
+
     @Column(nullable = false, unique = true, length = 254)
     private String email;
 
@@ -69,6 +72,7 @@ public class PlatformAccountEntity {
         this.id = id;
         this.email = email;
         this.accountType = accountType;
+        this.publicId = AccountPublicId.create(accountType);
     }
 
     @PrePersist
@@ -86,6 +90,10 @@ public class PlatformAccountEntity {
 
     public String getId() {
         return id;
+    }
+
+    public String getPublicId() {
+        return publicId;
     }
 
     public String getEmail() {

@@ -27,7 +27,7 @@ public interface PlatformAccountRepository extends JpaRepository<PlatformAccount
             WHERE (:search = ''
                 OR LOWER(account.email) LIKE LOWER(CONCAT('%', :search, '%'))
                 OR LOWER(COALESCE(account.displayName, '')) LIKE LOWER(CONCAT('%', :search, '%'))
-                OR LOWER(account.id) LIKE LOWER(CONCAT('%', :search, '%')))
+                OR LOWER(account.publicId) LIKE LOWER(CONCAT('%', :search, '%')))
               AND (:status IS NULL OR account.status = :status)
               AND (:accountType IS NULL OR account.accountType = :accountType)
               AND (:emailVerified IS NULL OR account.emailVerified = :emailVerified)

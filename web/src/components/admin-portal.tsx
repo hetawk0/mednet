@@ -41,6 +41,7 @@ type ProviderApplication = {
 
 type PlatformAccount = {
   id: string;
+  publicId: string;
   displayName: string | null;
   email: string;
   accountType: string;
@@ -1139,7 +1140,8 @@ function AdminWorkspace({
               Manage platform accounts here. New account records must complete
               normal email verification before sign-in. ADMIN can suspend or
               reactivate accounts; only SUPER_ADMIN can edit account details,
-              verification, roles, and deletion. Account IDs are stable UUIDs.
+              verification, roles, and deletion. Public account IDs are short,
+              type-prefixed identifiers; internal database IDs are not shown.
             </p>
             <form
               className="admin-record-form"
@@ -1210,13 +1212,13 @@ function AdminWorkspace({
             )}
             <form className="admin-account-filters" onSubmit={onSearchAccounts}>
               <label>
-                Search by name, email, or ID
+                Search by name, email, or public ID
                 <input
                   name="search"
                   type="search"
                   maxLength={254}
                   defaultValue={accountSearch}
-                  placeholder="Name, email, or UUID"
+                  placeholder="Name, email, or PT-..."
                 />
               </label>
               <label>
@@ -1258,7 +1260,7 @@ function AdminWorkspace({
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>Account ID</th>
+                    <th>Public ID</th>
                     <th>Name</th>
                     <th>Email</th>
                     <th>Type</th>
@@ -1277,7 +1279,7 @@ function AdminWorkspace({
                     accounts.map((account) => (
                       <Fragment key={account.id}>
                         <tr>
-                          <td><code className="admin-account-id">{account.id}</code></td>
+                          <td><code className="admin-account-id">{account.publicId}</code></td>
                           <td>{account.displayName || "—"}</td>
                           <td>{account.email}</td>
                           <td>{account.accountType}</td>

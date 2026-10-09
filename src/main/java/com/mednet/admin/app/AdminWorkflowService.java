@@ -389,8 +389,9 @@ public class AdminWorkflowService {
 
     private static PlatformAccount toModel(PlatformAccountEntity entity) {
         return new PlatformAccount(
-                entity.getId(), entity.getDisplayName(), entity.getEmail(), entity.getAccountType(), entity.getStatus(),
-                entity.isEmailVerified(), entity.getCreatedAt(), entity.getUpdatedAt());
+                entity.getId(), entity.getPublicId(), entity.getDisplayName(), entity.getEmail(),
+                entity.getAccountType(), entity.getStatus(), entity.isEmailVerified(),
+                entity.getCreatedAt(), entity.getUpdatedAt());
     }
 
     private static ServiceRequest toModel(ServiceRequestEntity entity) {

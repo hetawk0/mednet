@@ -20,9 +20,14 @@ Launchpad manifest. Production uses trailing-slash canonical paths; Swagger UI r
 to its index from `/swagger-ui/` to avoid a redirect loop with the hosting proxy.
 
 The admin console's **User management** area supports account provisioning with a display name and
-initial manual or generated password; generated passwords are shown once after creation. Account
-IDs are UUIDs. `GET /api/v1/admin/accounts` supports `page`, `size` (maximum 100), `search`
-(display name, email, or ID), `status`, `accountType`, and `emailVerified` filters. Admins can
+initial manual or generated password; generated passwords are shown once after creation. Public
+account IDs use a short uppercase type prefix and a 12-character Crockford Base32 token:
+`PT` (patient), `PR` (provider), `HC` (home-care staff), `LB` (laboratory staff), `AD` (admin),
+and `SA` (super admin). IDs are immutable after creation, including when account type changes;
+the account type field reflects current permissions. The UUID remains an internal database key
+and is not shown in the admin interface. `GET /api/v1/admin/accounts` supports `page`, `size`
+(maximum 100), `search` (display name, email, or public ID), `status`, `accountType`, and
+`emailVerified` filters. Admins can
 suspend or reactivate accounts. `SUPER_ADMIN` can edit name, email, account type, and password,
 toggle verification with `PATCH /api/v1/admin/accounts/{id}/verification`, or delete an account.
 New accounts are unverified by default; only verified accounts can sign in. Accounts linked to

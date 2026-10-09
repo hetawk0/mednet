@@ -954,6 +954,7 @@ class MedNetApplicationTests {
                         """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountType").value("HOME_CARE"))
+                .andExpect(jsonPath("$.publicId").value(org.hamcrest.Matchers.startsWith("HC-")))
                 .andReturn();
         String homeCareStaffId = objectMapper.readTree(homeCareAccountResult.getResponse().getContentAsString())
                 .get("id").asText();
@@ -1075,6 +1076,7 @@ class MedNetApplicationTests {
                         """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountType").value("LABORATORY"))
+                .andExpect(jsonPath("$.publicId").value(org.hamcrest.Matchers.startsWith("LB-")))
                 .andReturn();
         String labStaffId = objectMapper.readTree(labAccountResult.getResponse().getContentAsString())
                 .get("id").asText();
@@ -1567,11 +1569,15 @@ class MedNetApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.displayName").value("Pending User"))
                 .andExpect(jsonPath("$.emailVerified").value(false))
+                .andExpect(jsonPath("$.publicId").value(
+                        org.hamcrest.Matchers.matchesRegex("PT-[0-9A-HJKMNP-TV-Z]{12}")))
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist())
                 .andReturn();
         String accountId = objectMapper.readTree(created.getResponse().getContentAsString())
                 .get("id").asText();
+        String publicId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("publicId").asText();
         assertThat(accountId).hasSize(36);
 
         mockMvc.perform(patch("/api/v1/admin/accounts/{id}/verification", accountId)
@@ -1617,6 +1623,7 @@ class MedNetApplicationTests {
                 .andExpect(jsonPath("$.displayName").value("Updated User"))
                 .andExpect(jsonPath("$.email").value("updated-user@example.test"))
                 .andExpect(jsonPath("$.accountType").value("PROVIDER"))
+                .andExpect(jsonPath("$.publicId").value(publicId))
                 .andExpect(jsonPath("$.emailVerified").value(false));
 
         mockMvc.perform(get("/api/v1/admin/accounts")
@@ -1639,7 +1646,7 @@ class MedNetApplicationTests {
                 .andExpect(jsonPath("$.content[0].id").value(accountId));
 
         mockMvc.perform(get("/api/v1/admin/accounts")
-                .param("search", accountId)
+                .param("search", publicId)
                 .with(user(ADMIN_EMAIL).roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
