@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { Fragment, type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 
 type AccessState =
@@ -41,6 +41,7 @@ type ProviderApplication = {
 
 type PlatformAccount = {
   id: string;
+  displayName: string | null;
   email: string;
   accountType: string;
   status: string;
@@ -83,6 +84,14 @@ const moduleLabels: Record<string, string> = {
   accountSupport: "User management",
   serviceRequests: "Service request queue",
   auditTrail: "Administrative audit trail",
+  messaging: "Messaging",
+  medication: "Medication",
+  vitals: "Vitals",
+  notifications: "Notifications",
+  homeCare: "Home care",
+  laboratory: "Laboratory",
+  textConsultations: "Text consultations",
+  virtualConsultation: "Video and voice consultations",
 };
 
 const moduleKeys: Record<Exclude<AdminTab, "overview">, string> = {
@@ -106,6 +115,12 @@ export function AdminPortal() {
   });
   const [accountSearch, setAccountSearch] = useState("");
   const [accountStatus, setAccountStatus] = useState("");
+  const [accountTypeFilter, setAccountTypeFilter] = useState("");
+  const [accountVerificationFilter, setAccountVerificationFilter] = useState("");
+  const [accountPageSize, setAccountPageSize] = useState(25);
+  const [accountPasswordMode, setAccountPasswordMode] = useState<"manual" | "generated">("manual");
+  const [createdPassword, setCreatedPassword] = useState("");
+  const [editingAccountId, setEditingAccountId] = useState("");
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [auditEvents, setAuditEvents] = useState<AdminAuditEvent[]>([]);
   const [error, setError] = useState("");
@@ -126,12 +141,16 @@ export function AdminPortal() {
     const formData = new FormData(event.currentTarget);
     const search = String(formData.get("search") ?? "").trim();
     const status = String(formData.get("status") ?? "");
+    const accountType = String(formData.get("accountType") ?? "");
+    const emailVerified = String(formData.get("emailVerified") ?? "");
     setAccountSearch(search);
     setAccountStatus(status);
+    setAccountTypeFilter(accountType);
+    setAccountVerificationFilter(emailVerified);
     setBusy(true);
     setError("");
     try {
-      await reloadTab("accounts", 0, { search, status });
+      await reloadTab("accounts", 0, { search, status, accountType, emailVerified });
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -260,17 +279,27 @@ export function AdminPortal() {
   async function reloadTab(
     tab: Exclude<AdminTab, "overview">,
     requestedPage = 0,
-    filters: { search?: string; status?: string } = {},
+    filters: {
+      search?: string;
+      status?: string;
+      accountType?: string;
+      emailVerified?: string;
+      pageSize?: number;
+    } = {},
   ) {
     const endpoint = tab === "audit" ? "audit" : tab;
     const accountQuery = new URLSearchParams({
       page: String(requestedPage),
-      size: "25",
+      size: String(filters.pageSize ?? accountPageSize),
     });
     const search = filters.search ?? accountSearch;
     const status = filters.status ?? accountStatus;
+    const accountType = filters.accountType ?? accountTypeFilter;
+    const emailVerified = filters.emailVerified ?? accountVerificationFilter;
     if (search.trim()) accountQuery.set("search", search.trim());
     if (status) accountQuery.set("status", status);
+    if (accountType) accountQuery.set("accountType", accountType);
+    if (emailVerified) accountQuery.set("emailVerified", emailVerified);
     const query =
       tab === "accounts" ? `?${accountQuery.toString()}` : "";
     const response = await fetch(`/api/v1/admin/${endpoint}${query}`, {
@@ -325,7 +354,7 @@ export function AdminPortal() {
 
   async function mutateWorkflow(
     path: string,
-    method: "POST" | "PATCH",
+    method: "POST" | "PATCH" | "PUT",
     body: unknown,
   ) {
     const csrfResponse = await fetch("/api/v1/auth/csrf", {
@@ -373,11 +402,27 @@ export function AdminPortal() {
     new FormData(form).forEach((value, key) => {
       payload[key] = String(value);
     });
+    let generatedPassword = "";
+    if (path === "accounts") {
+      if (accountPasswordMode === "generated") {
+        const randomBytes = crypto.getRandomValues(new Uint8Array(24));
+        generatedPassword = btoa(String.fromCharCode(...randomBytes))
+          .replaceAll("+", "-")
+          .replaceAll("/", "_")
+          .replaceAll("=", "");
+        payload.password = generatedPassword;
+      }
+      delete payload.passwordMode;
+    }
 
     setBusy(true);
     setError("");
     try {
       await mutateWorkflow(path, "POST", payload);
+      if (path === "accounts") {
+        setCreatedPassword(generatedPassword);
+        setAccountPasswordMode("manual");
+      }
       await reloadTab(tab);
       await refreshOverview();
       form.reset();
@@ -415,17 +460,42 @@ export function AdminPortal() {
     }
   }
 
-  async function changeAccountRole(id: string, accountType: string) {
+  async function changeAccountVerification(id: string, emailVerified: boolean) {
     setBusy(true);
     setError("");
     try {
-      await mutateWorkflow(`accounts/${id}/role`, "PATCH", { accountType });
+      await mutateWorkflow(`accounts/${id}/verification`, "PATCH", { emailVerified });
       await reloadTab("accounts");
     } catch (mutationError) {
       setError(
         mutationError instanceof Error
           ? mutationError.message
-          : "Could not change the account role.",
+          : "Could not update verification status.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateAccount(event: FormEvent<HTMLFormElement>, id: string) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const payload: Record<string, string> = {};
+    new FormData(form).forEach((value, key) => {
+      const field = String(value);
+      if (key !== "password" || field.trim()) payload[key] = field;
+    });
+    setBusy(true);
+    setError("");
+    try {
+      await mutateWorkflow(`accounts/${id}`, "PUT", payload);
+      setEditingAccountId("");
+      await reloadTab("accounts");
+    } catch (mutationError) {
+      setError(
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Could not update this account.",
       );
     } finally {
       setBusy(false);
@@ -481,10 +551,11 @@ export function AdminPortal() {
     }
   }
 
-  async function changeAccountPage(page: number) {
+  async function changeAccountPage(page: number, size = accountPageSize) {
     setBusy(true);
     try {
-      await reloadTab("accounts", page);
+      if (size !== accountPageSize) setAccountPageSize(size);
+      await reloadTab("accounts", page, { pageSize: size });
     } catch {
       setError("Could not load that account page.");
     } finally {
@@ -679,6 +750,13 @@ export function AdminPortal() {
           accountPage={accountPage}
           accountSearch={accountSearch}
           accountStatus={accountStatus}
+          accountTypeFilter={accountTypeFilter}
+          accountVerificationFilter={accountVerificationFilter}
+          accountPageSize={accountPageSize}
+          accountPasswordMode={accountPasswordMode}
+          createdPassword={createdPassword}
+          editingAccountId={editingAccountId}
+          currentEmail={session?.email ?? ""}
           isSuperAdmin={session?.role === "SUPER_ADMIN"}
           accounts={accounts}
           auditEvents={auditEvents}
@@ -688,9 +766,20 @@ export function AdminPortal() {
           providers={providers}
           requests={requests}
           onChangeStatus={changeRecordStatus}
-          onChangeRole={changeAccountRole}
+          onChangeVerification={changeAccountVerification}
           onDeleteAccount={deleteAccount}
           onChangeAccountPage={changeAccountPage}
+          onSetPasswordMode={setAccountPasswordMode}
+          onClearCreatedPassword={() => setCreatedPassword("")}
+          onCopyPassword={async (password) => {
+            try {
+              await navigator.clipboard.writeText(password);
+            } catch {
+              setError("Could not copy the generated password.");
+            }
+          }}
+          onSetEditingAccountId={setEditingAccountId}
+          onUpdateAccount={updateAccount}
           onSearchAccounts={searchAccounts}
           onCreate={createRecord}
           onOpenTab={openTab}
@@ -710,6 +799,13 @@ function AdminWorkspace({
   accountPage,
   accountSearch,
   accountStatus,
+  accountTypeFilter,
+  accountVerificationFilter,
+  accountPageSize,
+  accountPasswordMode,
+  createdPassword,
+  editingAccountId,
+  currentEmail,
   isSuperAdmin,
   accounts,
   auditEvents,
@@ -719,9 +815,14 @@ function AdminWorkspace({
   providers,
   requests,
   onChangeStatus,
-  onChangeRole,
+  onChangeVerification,
   onDeleteAccount,
   onChangeAccountPage,
+  onSetPasswordMode,
+  onClearCreatedPassword,
+  onCopyPassword,
+  onSetEditingAccountId,
+  onUpdateAccount,
   onSearchAccounts,
   onCreate,
   onOpenTab,
@@ -731,6 +832,13 @@ function AdminWorkspace({
   accountPage: { number: number; totalPages: number; totalElements: number };
   accountSearch: string;
   accountStatus: string;
+  accountTypeFilter: string;
+  accountVerificationFilter: string;
+  accountPageSize: number;
+  accountPasswordMode: "manual" | "generated";
+  createdPassword: string;
+  editingAccountId: string;
+  currentEmail: string;
   isSuperAdmin: boolean;
   accounts: PlatformAccount[];
   auditEvents: AdminAuditEvent[];
@@ -745,9 +853,14 @@ function AdminWorkspace({
     status: string,
     tab: Exclude<AdminTab, "overview" | "audit">,
   ) => Promise<void>;
-  onChangeRole: (id: string, accountType: string) => Promise<void>;
+  onChangeVerification: (id: string, verified: boolean) => Promise<void>;
   onDeleteAccount: (id: string) => Promise<void>;
-  onChangeAccountPage: (page: number) => Promise<void>;
+  onChangeAccountPage: (page: number, size?: number) => Promise<void>;
+  onSetPasswordMode: (mode: "manual" | "generated") => void;
+  onClearCreatedPassword: () => void;
+  onCopyPassword: (password: string) => Promise<void>;
+  onSetEditingAccountId: (id: string) => void;
+  onUpdateAccount: (event: FormEvent<HTMLFormElement>, id: string) => Promise<void>;
   onSearchAccounts: (event: FormEvent<HTMLFormElement>) => void;
   onCreate: (
     event: FormEvent<HTMLFormElement>,
@@ -878,18 +991,22 @@ function AdminWorkspace({
                 {overview.modules.map((module) => (
                   <div className="admin-module-row" key={module.key}>
                     <span>{moduleLabels[module.key] ?? module.key}</span>
-                    <span
-                      className={
-                        module.status === "CONNECTED"
-                          ? "admin-module-status admin-module-ready"
-                          : "admin-module-status"
-                      }
-                    >
+                    <span className={`admin-module-status ${
+                      module.status === "CONNECTED"
+                        ? "admin-module-ready"
+                        : module.status === "DISABLED"
+                          ? "admin-module-disabled"
+                          : module.status === "PARTIAL"
+                            ? "admin-module-partial"
+                            : "admin-module-unconfigured"
+                    }`}>
                       {module.status === "CONNECTED"
                         ? "Connected"
                         : module.status === "PARTIAL"
-                          ? "Registry only"
-                          : "Configure PostgreSQL"}
+                          ? "Partially available"
+                          : module.status === "DISABLED"
+                            ? "Not implemented"
+                            : "Configure PostgreSQL"}
                     </span>
                   </div>
                 ))}
@@ -1020,15 +1137,18 @@ function AdminWorkspace({
           <section className="admin-workflow-section">
             <p className="admin-workflow-note">
               Manage platform accounts here. New account records must complete
-              normal registration and email verification before sign-in. ADMIN
-              can suspend or reactivate accounts; only SUPER_ADMIN can change
-              roles or delete accounts. Accounts linked to clinical or care
-              records are protected from deletion and role changes.
+              normal email verification before sign-in. ADMIN can suspend or
+              reactivate accounts; only SUPER_ADMIN can edit account details,
+              verification, roles, and deletion. Account IDs are stable UUIDs.
             </p>
             <form
               className="admin-record-form"
               onSubmit={(event) => void onCreate(event, "accounts", "accounts")}
             >
+              <label>
+                Name
+                <input name="displayName" maxLength={160} required />
+              </label>
               <label>
                 Email
                 <input name="email" type="email" maxLength={254} required />
@@ -1042,19 +1162,61 @@ function AdminWorkspace({
                   <option value="LABORATORY">Laboratory staff</option>
                 </select>
               </label>
+              <label>
+                Initial password
+                <select
+                  name="passwordMode"
+                  value={accountPasswordMode}
+                  onChange={(event) => {
+                    onClearCreatedPassword();
+                    onSetPasswordMode(event.target.value as "manual" | "generated");
+                  }}
+                >
+                  <option value="manual">Enter manually</option>
+                  <option value="generated">Generate securely</option>
+                </select>
+              </label>
+              {accountPasswordMode === "manual" && (
+                <label>
+                  Password (12–72 characters)
+                  <input
+                    name="password"
+                    type="password"
+                    minLength={12}
+                    maxLength={72}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+              )}
               <button className="admin-submit" type="submit" disabled={busy}>
                 Create account
               </button>
             </form>
+            {createdPassword && (
+              <div className="admin-generated-password" role="status">
+                <div>
+                  <strong>Save this generated password now</strong>
+                  <span>It is shown only once and will not be available again.</span>
+                </div>
+                <code>{createdPassword}</code>
+                <button
+                  type="button"
+                  onClick={() => void onCopyPassword(createdPassword)}
+                >
+                  Copy password
+                </button>
+              </div>
+            )}
             <form className="admin-account-filters" onSubmit={onSearchAccounts}>
               <label>
-                Search by email
+                Search by name, email, or ID
                 <input
                   name="search"
                   type="search"
                   maxLength={254}
                   defaultValue={accountSearch}
-                  placeholder="name@example.com"
+                  placeholder="Name, email, or UUID"
                 />
               </label>
               <label>
@@ -1065,6 +1227,29 @@ function AdminWorkspace({
                   <option value="SUSPENDED">Suspended</option>
                 </select>
               </label>
+              <label>
+                Account type
+                <select name="accountType" defaultValue={accountTypeFilter}>
+                  <option value="">All types</option>
+                  <option value="PATIENT">Patient</option>
+                  <option value="PROVIDER">Provider</option>
+                  <option value="ADMIN">Admin</option>
+                  <option value="SUPER_ADMIN">Super admin</option>
+                  <option value="HOME_CARE">Home care</option>
+                  <option value="LABORATORY">Laboratory</option>
+                </select>
+              </label>
+              <label>
+                Verification
+                <select
+                  name="emailVerified"
+                  defaultValue={accountVerificationFilter}
+                >
+                  <option value="">All</option>
+                  <option value="true">Verified</option>
+                  <option value="false">Pending</option>
+                </select>
+              </label>
               <button className="admin-submit" type="submit" disabled={busy}>
                 Search accounts
               </button>
@@ -1073,6 +1258,8 @@ function AdminWorkspace({
               <table className="admin-table">
                 <thead>
                   <tr>
+                    <th>Account ID</th>
+                    <th>Name</th>
                     <th>Email</th>
                     <th>Type</th>
                     <th>Verified</th>
@@ -1084,79 +1271,145 @@ function AdminWorkspace({
                 <tbody>
                   {accounts.length === 0 ? (
                     <tr>
-                      <td colSpan={6}>No accounts match these filters.</td>
+                      <td colSpan={8}>No accounts match these filters.</td>
                     </tr>
                   ) : (
                     accounts.map((account) => (
-                    <tr key={account.id}>
-                      <td>{account.email}</td>
-                      <td>{account.accountType}</td>
-                      <td>{account.emailVerified ? "Yes" : "Pending"}</td>
-                      <td>{account.status}</td>
-                      <td>
-                        {new Date(account.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="admin-row-actions">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            void onChangeStatus(
-                              "accounts",
-                              account.id,
-                              account.status === "ACTIVE"
-                                ? "SUSPENDED"
-                                : "ACTIVE",
-                              "accounts",
-                            )
-                          }
-                        >
-                          {account.status === "ACTIVE"
-                            ? "Suspend record"
-                            : "Reactivate record"}
-                        </button>
-                        {isSuperAdmin && (
-                          <>
-                            <select
-                              aria-label={`Change role for ${account.email}`}
-                              value={account.accountType}
-                              disabled={busy}
-                              onChange={(event) =>
-                                void onChangeRole(account.id, event.target.value)
-                              }
-                            >
-                              <option value="PATIENT">Patient</option>
-                              <option value="PROVIDER">Provider</option>
-                              <option value="ADMIN">Admin</option>
-                              <option value="SUPER_ADMIN">Super admin</option>
-                              <option value="HOME_CARE">Home care staff</option>
-                              <option value="LABORATORY">Laboratory staff</option>
-                            </select>
+                      <Fragment key={account.id}>
+                        <tr>
+                          <td><code className="admin-account-id">{account.id}</code></td>
+                          <td>{account.displayName || "—"}</td>
+                          <td>{account.email}</td>
+                          <td>{account.accountType}</td>
+                          <td>{account.emailVerified ? "Verified" : "Pending"}</td>
+                          <td>{account.status}</td>
+                          <td>{new Date(account.createdAt).toLocaleDateString()}</td>
+                          <td className="admin-row-actions">
                             <button
                               type="button"
-                              disabled={busy}
-                              onClick={() => void onDeleteAccount(account.id)}
+                              disabled={busy || account.email.toLowerCase() === currentEmail.toLowerCase()}
+                              onClick={() =>
+                                void onChangeStatus(
+                                  "accounts",
+                                  account.id,
+                                  account.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
+                                  "accounts",
+                                )
+                              }
                             >
-                              Delete
+                              {account.status === "ACTIVE" ? "Suspend" : "Reactivate"}
                             </button>
-                          </>
+                            {isSuperAdmin && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={busy || account.email.toLowerCase() === currentEmail.toLowerCase()}
+                                  onClick={() =>
+                                    onSetEditingAccountId(
+                                      editingAccountId === account.id ? "" : account.id,
+                                    )
+                                  }
+                                >
+                                  {editingAccountId === account.id ? "Cancel edit" : "Edit"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busy || account.email.toLowerCase() === currentEmail.toLowerCase()}
+                                  onClick={() =>
+                                    void onChangeVerification(account.id, !account.emailVerified)
+                                  }
+                                >
+                                  Mark {account.emailVerified ? "pending" : "verified"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busy || account.email.toLowerCase() === currentEmail.toLowerCase()}
+                                  onClick={() => void onDeleteAccount(account.id)}
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                        {isSuperAdmin && editingAccountId === account.id && (
+                          <tr>
+                            <td colSpan={8}>
+                              <form
+                                className="admin-account-edit-form"
+                                onSubmit={(event) => void onUpdateAccount(event, account.id)}
+                              >
+                                <label>
+                                  Name
+                                  <input name="displayName" defaultValue={account.displayName ?? ""} maxLength={160} required />
+                                </label>
+                                <label>
+                                  Email
+                                  <input name="email" type="email" defaultValue={account.email} maxLength={254} required />
+                                </label>
+                                <label>
+                                  Account type
+                                  <select name="accountType" defaultValue={account.accountType}>
+                                    <option value="PATIENT">Patient</option>
+                                    <option value="PROVIDER">Provider</option>
+                                    <option value="ADMIN">Admin</option>
+                                    <option value="SUPER_ADMIN">Super admin</option>
+                                    <option value="HOME_CARE">Home care staff</option>
+                                    <option value="LABORATORY">Laboratory staff</option>
+                                  </select>
+                                </label>
+                                <label>
+                                  Replace password (optional)
+                                  <input name="password" type="password" minLength={12} maxLength={72} autoComplete="new-password" />
+                                </label>
+                                <button className="admin-submit" type="submit" disabled={busy}>Save changes</button>
+                              </form>
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                    </tr>
+                      </Fragment>
                     ))
                   )}
                 </tbody>
               </table>
             </div>
             <div className="admin-pagination">
-              <span>{accountPage.totalElements} account records</span>
+              <span>
+                {accountPage.totalElements === 0
+                  ? "No account records"
+                  : `${accountPage.number * accountPageSize + 1}–${Math.min(
+                      (accountPage.number + 1) * accountPageSize,
+                      accountPage.totalElements,
+                    )} of ${accountPage.totalElements} accounts`}
+              </span>
               <div>
+                <label className="admin-page-size">
+                  Rows
+                  <select
+                    value={accountPageSize}
+                    disabled={busy}
+                    onChange={(event) =>
+                      void onChangeAccountPage(0, Number(event.target.value))
+                    }
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </label>
                 <button
                   type="button"
-                  disabled={busy || accountPage.number === 0}
+                  disabled={busy || accountPage.number <= 0}
                   onClick={() => void onChangeAccountPage(0)}
                 >
-                  First page
+                  First
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || accountPage.number <= 0}
+                  onClick={() => void onChangeAccountPage(accountPage.number - 1)}
+                >
+                  Previous
                 </button>
                 <span>
                   Page {accountPage.number + 1} of{" "}
@@ -1172,6 +1425,17 @@ function AdminWorkspace({
                   }
                 >
                   Next page
+                </button>
+                <button
+                type="button"
+                disabled={
+                  busy ||
+                  accountPage.totalPages === 0 ||
+                  accountPage.number + 1 >= accountPage.totalPages
+                }
+                onClick={() => void onChangeAccountPage(accountPage.totalPages - 1)}
+                >
+                Last
                 </button>
               </div>
             </div>

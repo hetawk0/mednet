@@ -41,15 +41,16 @@ public class AdminOverviewController {
                 workflows == null ? null : workflows.counts(),
                 List.of(
                         new AdminModule("providerReview", moduleStatus),
-                        new AdminModule("accountSupport", workflows == null ? "NOT_CONFIGURED" : "PARTIAL"),
-                        new AdminModule("serviceRequests", workflows == null ? "NOT_CONFIGURED" : "PARTIAL"),
+                        new AdminModule("accountSupport", moduleStatus),
+                        new AdminModule("serviceRequests", moduleStatus),
                         new AdminModule("auditTrail", moduleStatus),
                         new AdminModule("messaging", moduleStatus),
                         new AdminModule("medication", moduleStatus),
                         new AdminModule("vitals", moduleStatus),
                         new AdminModule("notifications", moduleStatus),
-                        new AdminModule("homeCare", workflows == null ? "NOT_CONFIGURED" : "PARTIAL"),
-                        new AdminModule("laboratory", workflows == null ? "NOT_CONFIGURED" : "PARTIAL"),
+                        new AdminModule("homeCare", moduleStatus),
+                        new AdminModule("laboratory", moduleStatus),
+                        new AdminModule("textConsultations", moduleStatus),
                         new AdminModule("virtualConsultation", "DISABLED")));
     }
 

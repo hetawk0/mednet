@@ -4,8 +4,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -65,6 +67,7 @@ public class AdminWorkflowService {
     private final PatientVitalRepository patientVitals;
     private final PatientServiceRequestRepository patientServiceRequests;
     private final NotificationService notifications;
+    private final PasswordEncoder passwordEncoder;
     private final String configuredAdminEmail;
 
     public AdminWorkflowService(
@@ -81,6 +84,7 @@ public class AdminWorkflowService {
             PatientVitalRepository patientVitals,
             PatientServiceRequestRepository patientServiceRequests,
             NotificationService notifications,
+            PasswordEncoder passwordEncoder,
             @Value("${mednet.admin.email:}") String configuredAdminEmail) {
         this.providers = providers;
         this.accounts = accounts;
@@ -95,6 +99,7 @@ public class AdminWorkflowService {
         this.patientVitals = patientVitals;
         this.patientServiceRequests = patientServiceRequests;
         this.notifications = notifications;
+        this.passwordEncoder = passwordEncoder;
         this.configuredAdminEmail = normalizeEmail(configuredAdminEmail);
     }
 
@@ -144,32 +149,68 @@ public class AdminWorkflowService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PlatformAccount> accounts(int page, int size, String search, String status) {
+    public Page<PlatformAccount> accounts(
+            int page, int size, String search, String status, String accountType, Boolean emailVerified) {
         int safePage = Math.max(0, page);
         int safeSize = Math.min(Math.max(1, size), 100);
         var pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
         String normalizedSearch = search == null ? "" : search.trim();
         String normalizedStatus = status == null || status.isBlank() ? null : requireStatus(status, ACCOUNT_STATUSES);
-        Page<PlatformAccountEntity> rows;
-        if (normalizedStatus == null && normalizedSearch.isBlank()) {
-            rows = accounts.findAll(pageable);
-        } else if (normalizedStatus == null) {
-            rows = accounts.findByEmailContainingIgnoreCase(normalizedSearch, pageable);
-        } else if (normalizedSearch.isBlank()) {
-            rows = accounts.findByStatus(normalizedStatus, pageable);
-        } else {
-            rows = accounts.findByEmailContainingIgnoreCaseAndStatus(normalizedSearch, normalizedStatus, pageable);
-        }
+        String normalizedType =
+                accountType == null || accountType.isBlank() ? null : requireStatus(accountType, ACCOUNT_TYPES);
+        Page<PlatformAccountEntity> rows = accounts.searchAccounts(
+                normalizedSearch, normalizedStatus, normalizedType, emailVerified, pageable);
         return rows.map(AdminWorkflowService::toModel);
     }
 
     @Transactional
-    public PlatformAccount createAccount(String email, String accountType, String actor) {
+    public PlatformAccount createAccount(
+            String displayName, String email, String accountType, String password, String actor) {
         String type = requireStatus(accountType, CREATABLE_ACCOUNT_TYPES);
+        String initialPassword = requirePassword(password);
         try {
-            PlatformAccountEntity entity = accounts.save(new PlatformAccountEntity(
-                    UUID.randomUUID().toString(), normalizeEmail(email), type));
+            PlatformAccountEntity entity = new PlatformAccountEntity(
+                    UUID.randomUUID().toString(), normalizeEmail(email), type);
+            entity.updateProfile(requireDisplayName(displayName), normalizeEmail(email), type);
+            entity.setPasswordHash(passwordEncoder.encode(initialPassword));
+            entity = accounts.saveAndFlush(entity);
             audit(actor, "account.created", "account", entity.getId());
+            return toModel(entity);
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists");
+        }
+    }
+
+    @Transactional
+    public PlatformAccount updateAccount(
+            String id, String displayName, String email, String accountType, String password, String actor) {
+        PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
+        requireNotConfiguredAdmin(entity);
+        String normalizedEmail = normalizeEmail(email);
+        String nextType = requireStatus(accountType, ACCOUNT_TYPES);
+        String nextName = requireDisplayName(displayName);
+        String nextPassword = password == null || password.isBlank() ? null : requirePassword(password);
+        boolean emailChanged = !entity.getEmail().equalsIgnoreCase(normalizedEmail);
+        if (!entity.getAccountType().equals(nextType) && hasProtectedAccountData(entity)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Accounts linked to profiles, care workflows, provider applications, or clinical records cannot change account type");
+        }
+        if (emailChanged && entity.getGoogleSubject() != null && nextPassword == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Set a new password when changing the email of a Google-linked account");
+        }
+        try {
+            entity.updateProfile(nextName, normalizedEmail, nextType);
+            if (emailChanged && entity.getGoogleSubject() != null) {
+                entity.unlinkGoogleSubject();
+            }
+            if (nextPassword != null) {
+                entity.setPasswordHash(passwordEncoder.encode(nextPassword));
+            }
+            audit(actor, "account.updated", "account", id);
+            accounts.flush();
             return toModel(entity);
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists");
@@ -198,6 +239,15 @@ public class AdminWorkflowService {
         }
         entity.changeAccountType(nextType);
         audit(actor, "account.role_changed", "account", id);
+        return toModel(entity);
+    }
+
+    @Transactional
+    public PlatformAccount changeAccountVerification(String id, boolean emailVerified, String actor) {
+        PlatformAccountEntity entity = accounts.findById(id).orElseThrow(() -> notFound("Platform account"));
+        requireNotConfiguredAdmin(entity);
+        entity.setEmailVerified(emailVerified);
+        audit(actor, emailVerified ? "account.verified" : "account.verification_pending", "account", id);
         return toModel(entity);
     }
 
@@ -309,6 +359,23 @@ public class AdminWorkflowService {
         return email.trim().toLowerCase(Locale.ROOT);
     }
 
+    private static String requireDisplayName(String displayName) {
+        String normalized = displayName == null ? "" : displayName.trim();
+        if (normalized.isBlank() || normalized.length() > 160) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name must contain 1 to 160 characters");
+        }
+        return normalized;
+    }
+
+    private static String requirePassword(String password) {
+        if (password == null || password.length() < 12 || password.length() > 72
+                || password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Password must be 12 to 72 characters and at most 72 UTF-8 bytes");
+        }
+        return password;
+    }
+
     private static ResponseStatusException notFound(String resource) {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, resource + " not found");
     }
@@ -322,7 +389,7 @@ public class AdminWorkflowService {
 
     private static PlatformAccount toModel(PlatformAccountEntity entity) {
         return new PlatformAccount(
-                entity.getId(), entity.getEmail(), entity.getAccountType(), entity.getStatus(),
+                entity.getId(), entity.getDisplayName(), entity.getEmail(), entity.getAccountType(), entity.getStatus(),
                 entity.isEmailVerified(), entity.getCreatedAt(), entity.getUpdatedAt());
     }
 

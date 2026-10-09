@@ -57,6 +57,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -949,7 +950,7 @@ class MedNetApplicationTests {
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"email":"homecare-staff@mednet.test","accountType":"HOME_CARE"}
+                        {"displayName":"Home Care Staff","email":"homecare-staff@mednet.test","accountType":"HOME_CARE","password":"HomeCare-Secure-Password-2026"}
                         """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountType").value("HOME_CARE"))
@@ -1070,7 +1071,7 @@ class MedNetApplicationTests {
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"email":"lab-staff@mednet.test","accountType":"LABORATORY"}
+                        {"displayName":"Laboratory Staff","email":"lab-staff@mednet.test","accountType":"LABORATORY","password":"Laboratory-Secure-Password-2026"}
                         """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountType").value("LABORATORY"))
@@ -1422,7 +1423,13 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api/v1/admin/overview").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.apiStatus").value("UP"))
-                .andExpect(jsonPath("$.modules[0].status").value("CONNECTED"));
+                .andExpect(jsonPath("$.modules[0].status").value("CONNECTED"))
+                .andExpect(jsonPath("$.modules[1].status").value("CONNECTED"))
+                .andExpect(jsonPath("$.modules[2].status").value("CONNECTED"))
+                .andExpect(jsonPath("$.modules[8].status").value("CONNECTED"))
+                .andExpect(jsonPath("$.modules[9].status").value("CONNECTED"))
+                .andExpect(jsonPath("$.modules[10].status").value("CONNECTED"))
+                .andExpect(jsonPath("$.modules[11].status").value("DISABLED"));
 
         mockMvc.perform(get("/api/v1/auth/admin/session").session(session))
                 .andExpect(status().isOk())
@@ -1440,14 +1447,14 @@ class MedNetApplicationTests {
                 .with(user(ADMIN_EMAIL).roles("ADMIN"))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"unexpected-admin@example.test\",\"accountType\":\"SUPER_ADMIN\"}"))
+                .content("{\"displayName\":\"Unexpected Admin\",\"email\":\"unexpected-admin@example.test\",\"accountType\":\"SUPER_ADMIN\",\"password\":\"Unexpected-Admin-Password-2026\"}"))
                 .andExpect(status().isBadRequest());
 
         MvcResult accountResult = mockMvc.perform(post("/api/v1/admin/accounts")
                 .with(user(ADMIN_EMAIL).roles("ADMIN"))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"role-target@example.test\",\"accountType\":\"PATIENT\"}"))
+                .content("{\"displayName\":\"Role Target\",\"email\":\"role-target@example.test\",\"accountType\":\"PATIENT\",\"password\":\"Role-Target-Password-2026\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         String accountId = objectMapper.readTree(accountResult.getResponse().getContentAsString())
@@ -1507,7 +1514,7 @@ class MedNetApplicationTests {
                 .with(user(ADMIN_EMAIL).roles("ADMIN"))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"patient@example.test\",\"accountType\":\"PATIENT\"}"))
+                .content("{\"displayName\":\"Test Patient\",\"email\":\"patient@example.test\",\"accountType\":\"PATIENT\",\"password\":\"Patient-Secure-Password-2026\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         String accountId = objectMapper.readTree(accountResult.getResponse().getContentAsString())
@@ -1546,6 +1553,105 @@ class MedNetApplicationTests {
                 .andReturn();
         String auditJson = auditResult.getResponse().getContentAsString();
         assertThat(auditJson).contains(providerId, accountId, requestId, ADMIN_EMAIL);
+    }
+
+    @Test
+    void superAdminCanManageAccountProfileVerificationAndSearch() throws Exception {
+        MvcResult created = mockMvc.perform(post("/api/v1/admin/accounts")
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"displayName":"Pending User","email":"pending-user@example.test","accountType":"PATIENT","password":"Pending-User-Password-2026"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayName").value("Pending User"))
+                .andExpect(jsonPath("$.emailVerified").value(false))
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist())
+                .andReturn();
+        String accountId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("id").asText();
+        assertThat(accountId).hasSize(36);
+
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/verification", accountId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"emailVerified\":true}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/verification", accountId)
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"emailVerified\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailVerified").value(true));
+
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/verification", accountId)
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"emailVerified\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailVerified").value(false));
+
+        mockMvc.perform(put("/api/v1/admin/accounts/{id}", accountId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"displayName":"Updated User","email":"updated-user@example.test","accountType":"PROVIDER"}
+                        """))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/v1/admin/accounts/{id}", accountId)
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"displayName":"Updated User","email":"updated-user@example.test","accountType":"PROVIDER"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayName").value("Updated User"))
+                .andExpect(jsonPath("$.email").value("updated-user@example.test"))
+                .andExpect(jsonPath("$.accountType").value("PROVIDER"))
+                .andExpect(jsonPath("$.emailVerified").value(false));
+
+        mockMvc.perform(get("/api/v1/admin/accounts")
+                .param("search", "Updated User")
+                .param("accountType", "PROVIDER")
+                .param("emailVerified", "false")
+                .param("page", "0")
+                .param("size", "50")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.size").value(50))
+                .andExpect(jsonPath("$.content[0].id").value(accountId));
+
+        mockMvc.perform(get("/api/v1/admin/accounts")
+                .param("search", "updated-user@example.test")
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(accountId));
+
+        mockMvc.perform(get("/api/v1/admin/accounts")
+                .param("search", accountId)
+                .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(accountId));
+
+        PlatformAccountEntity configuredAdmin = accounts.findFirstByEmailIgnoreCase(ADMIN_EMAIL).orElseThrow();
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/verification", configuredAdmin.getId())
+                .with(user(ADMIN_EMAIL).roles("SUPER_ADMIN"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"emailVerified\":false}"))
+                .andExpect(status().isConflict());
     }
 
 }

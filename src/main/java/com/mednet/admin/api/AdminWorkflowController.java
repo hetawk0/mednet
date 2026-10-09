@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,7 +20,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.NotNull;
 
 import com.mednet.admin.app.AdminWorkflowService;
 import com.mednet.admin.data.AdminWorkflowModels.AdminAuditEvent;
@@ -74,13 +75,30 @@ public class AdminWorkflowController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
             @RequestParam(required = false) @Size(max = 254) String search,
-            @RequestParam(required = false) String status) {
-        return service.accounts(page, size, search, status);
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String accountType,
+            @RequestParam(required = false) Boolean emailVerified) {
+        return service.accounts(page, size, search, status, accountType, emailVerified);
     }
 
     @PostMapping("/accounts")
-    public PlatformAccount createAccount(@Valid @RequestBody CreateAccountRequest request, Authentication actor) {
-        return service.createAccount(request.email(), request.accountType(), actorEmail(actor));
+    public PlatformAccount createAccount(
+            @Valid @RequestBody CreateAccountRequest request, Authentication actor) {
+        return service.createAccount(
+                request.displayName(),
+                request.email(),
+                request.accountType(),
+                request.password(),
+                actorEmail(actor));
+    }
+
+    @PutMapping("/accounts/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PlatformAccount updateAccount(
+            @PathVariable String id, @Valid @RequestBody UpdateAccountRequest request, Authentication actor) {
+        return service.updateAccount(
+                id, request.displayName(), request.email(), request.accountType(), request.password(),
+                actorEmail(actor));
     }
 
     @PatchMapping("/accounts/{id}/status")
@@ -94,6 +112,13 @@ public class AdminWorkflowController {
     public PlatformAccount changeAccountRole(
             @PathVariable String id, @Valid @RequestBody RoleRequest request, Authentication actor) {
         return service.changeAccountType(id, request.accountType(), actorEmail(actor));
+    }
+
+    @PatchMapping("/accounts/{id}/verification")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PlatformAccount changeAccountVerification(
+            @PathVariable String id, @Valid @RequestBody VerificationRequest request, Authentication actor) {
+        return service.changeAccountVerification(id, request.emailVerified(), actorEmail(actor));
     }
 
     @org.springframework.web.bind.annotation.DeleteMapping("/accounts/{id}")
@@ -144,8 +169,17 @@ public class AdminWorkflowController {
     }
 
     public record CreateAccountRequest(
+            @NotBlank @Size(max = 160) String displayName,
             @NotBlank @Email @Size(max = 254) String email,
-            @NotBlank String accountType) {
+            @NotBlank String accountType,
+            @NotBlank @Size(min = 12, max = 72) String password) {
+    }
+
+    public record UpdateAccountRequest(
+            @NotBlank @Size(max = 160) String displayName,
+            @NotBlank @Email @Size(max = 254) String email,
+            @NotBlank String accountType,
+            @Size(min = 12, max = 72) String password) {
     }
 
     public record CreateRequest(
@@ -158,5 +192,8 @@ public class AdminWorkflowController {
     }
 
     public record RoleRequest(@NotBlank String accountType) {
+    }
+
+    public record VerificationRequest(@NotNull Boolean emailVerified) {
     }
 }

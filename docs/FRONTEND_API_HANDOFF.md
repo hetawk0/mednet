@@ -19,10 +19,20 @@ share administrator credentials. The API paths are routed to the Spring Boot ser
 Launchpad manifest. Production uses trailing-slash canonical paths; Swagger UI routes directly
 to its index from `/swagger-ui/` to avoid a redirect loop with the hosting proxy.
 
-The admin console's **User management** area supports account provisioning, search and status
-filtering, suspension/reactivation, and (for `SUPER_ADMIN` only) role changes and deletion.
-Provisioned accounts still complete the normal registration and email-verification flow. Accounts
-linked to care or clinical records cannot be deleted or have their role changed.
+The admin console's **User management** area supports account provisioning with a display name and
+initial manual or generated password; generated passwords are shown once after creation. Account
+IDs are UUIDs. `GET /api/v1/admin/accounts` supports `page`, `size` (maximum 100), `search`
+(display name, email, or ID), `status`, `accountType`, and `emailVerified` filters. Admins can
+suspend or reactivate accounts. `SUPER_ADMIN` can edit name, email, account type, and password,
+toggle verification with `PATCH /api/v1/admin/accounts/{id}/verification`, or delete an account.
+New accounts are unverified by default; only verified accounts can sign in. Accounts linked to
+care or clinical records cannot be deleted or have their account type changed, and the configured
+administrator account cannot be modified or deleted.
+
+The overview module statuses describe actual API/storage availability: database-backed workflows
+are `CONNECTED` when PostgreSQL is configured, `NOT_CONFIGURED` otherwise. Text consultations are
+implemented; video/voice consultations remain `DISABLED` and are not a PostgreSQL configuration
+problem.
 
 ## Local development
 

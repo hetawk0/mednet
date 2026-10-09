@@ -20,6 +20,9 @@ public class PlatformAccountEntity {
     @Column(nullable = false, unique = true, length = 254)
     private String email;
 
+    @Column(name = "display_name", length = 160)
+    private String displayName;
+
     @Column(name = "google_subject", unique = true, length = 255)
     private String googleSubject;
 
@@ -89,6 +92,10 @@ public class PlatformAccountEntity {
         return email;
     }
 
+    public String getDisplayName() {
+        return displayName;
+    }
+
     public String getGoogleSubject() {
         return googleSubject;
     }
@@ -147,11 +154,37 @@ public class PlatformAccountEntity {
     }
 
     public void changeEmail(String email) {
-        this.email = email;
+        if (!this.email.equalsIgnoreCase(email)) {
+            this.email = email;
+            this.emailVerified = false;
+            this.verificationTokenHash = null;
+            this.verificationTokenExpiresAt = null;
+        }
+    }
+
+    public void updateProfile(String displayName, String email, String accountType) {
+        this.displayName = displayName;
+        changeEmail(email);
+        this.accountType = accountType;
+    }
+
+    public void setEmailVerified(boolean verified) {
+        if (verified) {
+            verifyEmail();
+        } else {
+            this.emailVerified = false;
+            this.verificationTokenHash = null;
+            this.verificationTokenExpiresAt = null;
+        }
     }
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+        clearPasswordResetToken();
+    }
+
+    public void unlinkGoogleSubject() {
+        this.googleSubject = null;
     }
 
     public void setVerificationToken(String tokenHash, Instant expiresAt) {

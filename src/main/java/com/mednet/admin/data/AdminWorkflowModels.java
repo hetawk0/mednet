@@ -21,6 +21,7 @@ public final class AdminWorkflowModels {
 
     public record PlatformAccount(
             String id,
+            String displayName,
             String email,
             String accountType,
             String status,

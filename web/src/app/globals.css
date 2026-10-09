@@ -380,6 +380,9 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .admin-count-strip strong { font-size: 22px; }
 .admin-count-strip span { color: #6d7e76; font-size: 11px; }
 .admin-module-ready { color: #23624d; }
+.admin-module-partial { color: #94621a; }
+.admin-module-disabled { color: #6d7e76; }
+.admin-module-unconfigured { color: #a34e3d; }
 .admin-not-configured { margin-top: 28px; padding: 22px 0; border-block: 1px solid #dce5dd; }
 .admin-not-configured h2 { margin: 0; font-size: 19px; }
 .admin-not-configured p:last-child { max-width: 720px; color: #6d7e76; font-size: 13px; line-height: 1.7; }
@@ -390,10 +393,20 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .admin-record-form label { display: grid; gap: 6px; color: #3d524b; font-size: 10px; font-weight: 700; }
 .admin-record-form input, .admin-record-form select { width: 100%; min-height: 40px; padding: 0 9px; border: 1px solid #c8d6cc; border-radius: 0; background: #fff; color: #18352f; font: inherit; font-size: 12px; }
 .admin-record-form .admin-submit { min-height: 40px; margin: 0; }
-.admin-account-filters { display: grid; grid-template-columns: minmax(220px, 2fr) minmax(170px, 1fr) auto; align-items: end; gap: 13px; padding: 20px 0; border-bottom: 1px solid #dce5dd; }
+.admin-account-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); align-items: end; gap: 13px; padding: 20px 0; border-bottom: 1px solid #dce5dd; }
 .admin-account-filters label { display: grid; gap: 6px; color: #3d524b; font-size: 10px; font-weight: 700; }
 .admin-account-filters input, .admin-account-filters select { width: 100%; min-height: 40px; padding: 0 9px; border: 1px solid #c8d6cc; border-radius: 0; background: #fff; color: #18352f; font: inherit; font-size: 12px; }
 .admin-account-filters .admin-submit { min-height: 40px; margin: 0; padding-inline: 16px; }
+.admin-generated-password { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 13px; border: 1px solid #c8d6cc; background: #f4f8f4; color: #18352f; }
+.admin-generated-password > div { display: grid; gap: 4px; margin-right: auto; }
+.admin-generated-password strong { font-size: 12px; }
+.admin-generated-password span { color: #6d7e76; font-size: 10px; }
+.admin-generated-password code, .admin-account-id { overflow-wrap: anywhere; color: #153f34; font-size: 10px; }
+.admin-generated-password button { min-height: 32px; padding: 0 10px; border: 1px solid #c8d6cc; background: #fff; color: #153f34; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
+.admin-account-edit-form { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); align-items: end; gap: 12px; padding: 8px 0; }
+.admin-account-edit-form label, .admin-page-size { display: grid; gap: 5px; color: #3d524b; font-size: 10px; font-weight: 700; }
+.admin-account-edit-form input, .admin-account-edit-form select, .admin-page-size select { width: 100%; min-height: 34px; padding: 0 8px; border: 1px solid #c8d6cc; background: #fff; color: #18352f; font: inherit; font-size: 11px; }
+.admin-account-edit-form .admin-submit { min-height: 34px; margin: 0; }
 .admin-table-wrap { width: 100%; overflow-x: auto; }
 .admin-table { width: 100%; min-width: 730px; border-collapse: collapse; text-align: left; }
 .admin-table th { padding: 12px 10px; border-bottom: 1px solid #c8d6cc; color: #6d7e76; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
@@ -405,8 +418,10 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .admin-row-actions button { min-height: 30px; padding: 0 8px; border: 1px solid #c8d6cc; background: #fff; color: #153f34; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
 .admin-row-actions button:disabled { opacity: .5; cursor: wait; }
 .admin-row-actions select { min-height: 30px; padding: 0 6px; border: 1px solid #c8d6cc; background: #fff; color: #153f34; font: inherit; font-size: 10px; }
-.admin-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 17px; color: #6d7e76; font-size: 11px; }
-.admin-pagination > div { display: flex; align-items: center; gap: 10px; }
+.admin-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-top: 17px; color: #6d7e76; font-size: 11px; }
+.admin-pagination > div { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.admin-page-size { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.admin-page-size select { width: auto; min-height: 30px; }
 .admin-pagination button { min-height: 30px; padding: 0 9px; border: 1px solid #c8d6cc; background: #fff; color: #153f34; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
 .admin-pagination button:disabled { opacity: .45; cursor: default; }
 
@@ -434,6 +449,7 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 	.admin-count-strip { grid-template-columns: 1fr; }
 	.admin-count-strip > div + div { border-top: 1px solid #dce5dd; border-left: 0; }
 	.admin-record-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.admin-account-edit-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.patient-dashboard-grid { grid-template-columns: 1fr; }
 }
 
@@ -441,5 +457,6 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 	.admin-tabs { margin-inline: -18px; padding-inline: 18px; }
 	.admin-tab { padding-inline: 12px; }
 	.admin-record-form { grid-template-columns: 1fr; }
+	.admin-account-edit-form { grid-template-columns: 1fr; }
 	.admin-record-form .admin-submit { width: 100%; }
 }
