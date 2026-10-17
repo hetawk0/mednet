@@ -10,6 +10,23 @@ Authentication was subsequently changed to MedNet-managed sessions and EKDSend e
 and Supabase Auth references in this historical progress log are superseded by
 [`AUTHENTICATION_SETUP.md`](AUTHENTICATION_SETUP.md).
 
+## Fidelity correction log — header, footer and homepage (2026-10-17)
+
+Requested: correct the public header, footer and homepage against the Figma reference
+(https://dab-text-35201810.figma.site). Uncommitted, awaiting review.
+
+- **Method.** Geometry and computed styles of reference and implementation captured with Playwright
+  (Edge) at 1440, 1024, 768 and 390px, compared element by element, corrected, and re-measured.
+  The Figma MCP was not authenticated, so the published Make prototype was the reference; no Figma
+  frames or component properties were inspected directly.
+- **Changes.** See `DESIGN_SYSTEM.md` §14.4. Files: `globals.css` (container width, three colour
+  tokens), `public-header.tsx`, `public-footer.tsx`, `public-nav.ts`, `wordmark.tsx`, `ui/card.tsx`
+  (`Eyebrow size`), `features/home/*`, new `features/public/pending-page.tsx` and six placeholder routes.
+- **Decision (user, 2026-10-17).** The previously hidden links are rendered and lead to placeholder
+  pages instead of staying hidden.
+- **Verification.** Lint, typecheck, Vitest, and the mocked Playwright suite; results are in the
+  completion report for this change.
+
 ## Phase 5E log — final quality audit
 
 Full findings, classifications and blockers: `FINAL_FRONTEND_QA.md`. Fidelity measurements:

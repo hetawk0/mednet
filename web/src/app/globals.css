@@ -16,6 +16,7 @@
 	--color-green-900: #104c3b;
 	--color-green-800: #126048;
 	--color-green-700: #147453;
+	--color-green-300: #8bd9ba; /* icons on the dark homepage band */
 	--color-green-100: #dcefe7;
 	--color-green-50: #edf7f3;
 	--color-ink: #17231f;
@@ -23,6 +24,8 @@
 	--color-ink-faint: #64716c;
 	--color-line: #dce4e0;
 	--color-line-soft: #e9eeeb;
+	--color-line-warm: #d6d2c8; /* step rules on the warm surface */
+	--color-ink-inverse-soft: #bdd0c8; /* supporting text on green-950 (8.8:1) */
 	/* Reference #aebbb5 is 1.99:1 on white; darkened to the lightest same-hue value meeting the
 	   reference's own 3:1 UI-boundary rule (3.24:1 on white, 3.03:1 on canvas). */
 	--color-control-border: #85928c;
@@ -95,7 +98,7 @@
 	--breakpoint-lg: 75rem; /* 1200px — Wide, 12 columns */
 	--breakpoint-xl: 90rem; /* 1440px — Extra wide */
 	--container-content: 1480px; /* stated extra-wide maximum */
-	--container-page: 77.5rem; /* 1240px incl. 32px gutters → ~1176px content, as measured at 1440px */
+	--container-page: 77.75rem; /* 1244px incl. 32px gutters → 1180px content, as measured at 1440px */
 	--width-sidebar: 15.75rem;
 	--width-sidebar-rail: 4.5rem;
 }

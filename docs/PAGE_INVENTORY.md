@@ -21,7 +21,7 @@ Status key: **Designed** = full bespoke screen in reference · **Template** = ge
 |---|---|---|---|---|
 | Homepage | Designed | `/` | ✅ 4B: `features/home/*` to reference; live specialties and providers | `GET /providers`, `GET /providers/{id}/availability` |
 | About, Services | None (footer links only) | `/about`, `/services` | ✅ 4B: interpreted with `PageIntro` + cards (`DESIGN_SYSTEM.md` §14) | — |
-| For providers, Help, Contact, Privacy, Terms, Accessibility | None | not built — links hidden until content/policy is approved | — | — |
+| For providers, Help, Contact, Privacy, Terms, Accessibility | None | `/for-providers`, `/help`, `/contact`, `/privacy`, `/terms`, `/accessibility` | ✅ 2026-10-17: placeholder pages (`features/public/pending-page.tsx`) stating content is pending approval; no invented content | — |
 | Doctor discovery / booking flow | Component-level preview only (DS → Components) | `/find-care` | ✅ 4B: `features/find-care/*` (search, open-times drawer, patient request) | `GET /providers`, `GET /providers/{id}/availability`, `POST /appointments` |
 
 ### Auth

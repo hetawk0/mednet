@@ -46,10 +46,10 @@ function initials(text: string) {
 }
 
 const sectionTitle =
-  "mt-2 text-[1.875rem] leading-[2.25rem] font-normal tracking-[-0.025em] text-green-950 md:text-[2.25rem] md:leading-[2.6rem]";
+  "mt-[0.5625rem] text-[2.25rem] leading-[1.15] font-normal tracking-[-0.025em] text-green-950";
 
 const categoryCard =
-  "group flex h-full flex-col rounded-md border border-border bg-surface p-5 transition-colors hover:border-action hover:bg-action-subtle md:p-[1.4375rem]";
+  "group flex h-full flex-col rounded-md border border-border bg-surface p-[1.375rem] transition-colors hover:border-action hover:bg-action-subtle";
 
 export function HomeDirectory() {
   const [directory, setDirectory] = useState<Directory>({ state: "loading" });
@@ -80,24 +80,24 @@ export function HomeDirectory() {
 
   return (
     <>
-      <section aria-labelledby="care-types-title" className="mx-auto max-w-page px-4 py-16 md:px-6 lg:px-8 lg:py-[6.5rem]">
+      <section aria-labelledby="care-types-title" className="mx-auto max-w-page px-4 py-[5.75rem] md:px-6 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Eyebrow tone="action">Care for everyday needs</Eyebrow>
+            <Eyebrow tone="action" size="section">Care for everyday needs</Eyebrow>
             <h2 id="care-types-title" className={sectionTitle}>
               Start with the right kind of care
             </h2>
           </div>
           <Link
             href="/services"
-            className="inline-flex min-h-11 items-center gap-2 rounded-sm text-button font-bold text-green-800 hover:text-action"
+            className="inline-flex min-h-11 items-center gap-2 rounded-sm text-body font-bold text-action hover:text-action-hover"
           >
             View all services
             <ArrowRight aria-hidden size={18} strokeWidth={1.8} />
           </Link>
         </div>
 
-        <ul className="mt-9 grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-busy={directory.state === "loading"}>
+        <ul className="mt-[2.125rem] grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-busy={directory.state === "loading"}>
           {directory.state === "loading"
             ? Array.from({ length: SPECIALTY_CARDS }, (_, index) => (
                 <li key={index} className="rounded-md border border-border bg-surface p-5">
@@ -111,28 +111,28 @@ export function HomeDirectory() {
                   <Link href={`/find-care?specialty=${encodeURIComponent(name)}`} className={categoryCard}>
                     <span
                       aria-hidden
-                      className="inline-flex size-12 items-center justify-center rounded-sm bg-green-50 text-caption font-bold text-green-800"
+                      className="inline-flex size-12 items-center justify-center rounded-sm bg-green-50 text-caption font-bold text-action"
                     >
                       {initials(name)}
                     </span>
-                    <span className="mt-5 text-[1.125rem] leading-[1.6875rem] font-bold text-ink [overflow-wrap:anywhere]">
+                    <span className="mt-3.5 text-[1.125rem] leading-[1.6875rem] font-bold text-ink [overflow-wrap:anywhere]">
                       {name}
                     </span>
-                    <span className="mt-1 text-data text-text-secondary">
+                    <span className="mt-1.5 text-data leading-[1.4] text-text-secondary">
                       {count} approved {count === 1 ? "provider" : "providers"}
                     </span>
-                    <span aria-hidden className="mt-auto pt-6 text-ink"><ChevronRight size={18} strokeWidth={1.8} /></span>
+                    <span aria-hidden className="mt-auto pt-[1.8125rem] text-text-muted"><ChevronRight size={18} strokeWidth={1.8} /></span>
                   </Link>
                 </li>
               ))}
           <li>
             <Link href="/services#laboratory" className={categoryCard}>
-              <span aria-hidden className="inline-flex size-12 items-center justify-center rounded-sm bg-green-50 text-green-800">
+              <span aria-hidden className="inline-flex size-12 items-center justify-center rounded-sm bg-green-50 text-action">
                 <FlaskConical size={20} strokeWidth={1.8} />
               </span>
-              <span className="mt-5 text-[1.125rem] leading-[1.6875rem] font-bold text-ink">Laboratory requests</span>
-              <span className="mt-1 text-data text-text-secondary">Request tests and follow their progress</span>
-              <span aria-hidden className="mt-auto pt-6 text-ink"><ChevronRight size={18} strokeWidth={1.8} /></span>
+              <span className="mt-3.5 text-[1.125rem] leading-[1.6875rem] font-bold text-ink">Laboratory requests</span>
+              <span className="mt-1.5 text-data leading-[1.4] text-text-secondary">Request tests and follow their progress</span>
+              <span aria-hidden className="mt-auto pt-[1.8125rem] text-text-muted"><ChevronRight size={18} strokeWidth={1.8} /></span>
             </Link>
           </li>
         </ul>
@@ -146,17 +146,17 @@ export function HomeDirectory() {
         ) : null}
       </section>
 
-      <section aria-labelledby="providers-title" className="mx-auto max-w-page px-4 pb-16 md:px-6 lg:px-8 lg:pb-[5.75rem]">
+      <section aria-labelledby="providers-title" className="mx-auto max-w-page px-4 pb-[5.75rem] md:px-6 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Eyebrow tone="action">Approved providers</Eyebrow>
+            <Eyebrow tone="action" size="section">Approved providers</Eyebrow>
             <h2 id="providers-title" className={sectionTitle}>
               Explore available care
             </h2>
           </div>
           <Link
             href="/find-care"
-            className="inline-flex min-h-11 items-center gap-2 rounded-sm text-button font-bold text-green-800 hover:text-action"
+            className="inline-flex min-h-11 items-center gap-2 rounded-sm text-body font-bold text-action hover:text-action-hover"
           >
             See all providers
             {directory.state === "ready" ? <span className="font-normal text-text-secondary">({directory.total})</span> : null}
@@ -164,7 +164,7 @@ export function HomeDirectory() {
           </Link>
         </div>
 
-        <div className="mt-9">
+        <div className="mt-[2.125rem]">
           {directory.state === "error" ? (
             <StateMessage
               kind="error"

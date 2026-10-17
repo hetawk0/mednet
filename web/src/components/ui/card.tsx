@@ -30,17 +30,21 @@ export function Card({
  */
 export function Eyebrow({
   tone = "muted",
+  size = "default",
   className,
   children,
 }: {
   tone?: "muted" | "action" | "inverse";
+  /** `section`: the homepage section kicker, 12px with 0.11em tracking in a 24px line box. */
+  size?: "default" | "section";
   className?: string;
   children: ReactNode;
 }) {
   return (
     <p
       className={cn(
-        "text-eyebrow font-bold tracking-[0.08em] uppercase",
+        "font-bold uppercase",
+        size === "default" ? "text-eyebrow tracking-[0.08em]" : "text-badge leading-6 tracking-[0.11em]",
         tone === "muted" && "text-ink-faint",
         tone === "action" && "text-action",
         tone === "inverse" && "text-green-100",

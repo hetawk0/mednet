@@ -21,8 +21,8 @@ export function Wordmark({
       href={href}
       aria-label="MedNet home"
       className={cn(
-        "inline-flex items-center rounded-sm text-[1.5625rem] leading-none font-bold tracking-tight",
-        tone === "dark" ? "text-green-950" : "text-white",
+        "inline-flex items-center rounded-sm text-[1.5625rem] leading-none font-bold tracking-[-0.04em]",
+        tone === "dark" ? "text-green-900" : "text-white",
         className,
       )}
     >

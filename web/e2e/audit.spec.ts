@@ -23,7 +23,7 @@ import { inspect, keyboardWalk, settle } from "./support/quality";
 /** App routes (from `src/app`), dynamic segments as patterns. Anything else linked from a page is a dead link. */
 const ROUTES: RegExp[] = [
   /^\/$/,
-  /^\/(find-care|about|services|sign-in|reset|verify|account)$/,
+  /^\/(find-care|about|services|sign-in|reset|verify|account|for-providers|help|contact|privacy|accessibility|terms)$/,
   /^\/patient(\/(find-a-doctor|appointments|appointments\/consultation|messages|records|payments|help|profile))?$/,
   /^\/provider(\/(schedule|appointments|appointments\/consultation|patients|patients\/[^/]+|clinical-work|messages|earnings|help|profile))?$/,
   /^\/admin(\/(users|providers|verification|security|configuration|tasks|appointments|onboarding|escalations|reports))?$/,
@@ -62,7 +62,7 @@ async function stubPublic(page: Page) {
 }
 
 const AREAS: Area[] = [
-  { name: "public", stub: stubPublic, paths: ["/", "/find-care", "/find-care?provider=p1", "/about", "/services", "/no-such-page"] },
+  { name: "public", stub: stubPublic, paths: ["/", "/find-care", "/find-care?provider=p1", "/about", "/services", "/for-providers", "/privacy", "/no-such-page"] },
   { name: "account access", stub: stubPublic, paths: ["/sign-in", "/reset", "/verify", "/account"] },
   {
     name: "patient",

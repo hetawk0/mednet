@@ -1,15 +1,15 @@
 /**
- * Public navigation from the reference header and footer. Entries without a route are
- * kept here (href: null) so the design inventory stays visible, but are not rendered
- * until their pages exist — the frontend must not link to pages that do not exist.
+ * Public navigation from the reference header and footer. Every entry has a route: pages whose
+ * content is not approved yet (For providers, Help, Contact, Privacy, Accessibility, Terms) are
+ * placeholder pages that say so (features/public/pending-page.tsx), so no link leads nowhere.
  */
-export type PublicLink = { label: string; href: string | null };
+export type PublicLink = { label: string; href: string };
 
 export const PUBLIC_HEADER_LINKS: PublicLink[] = [
   { label: "Find care", href: "/find-care" },
   { label: "How it works", href: "/about" },
-  { label: "For providers", href: null },
-  { label: "Help", href: null },
+  { label: "For providers", href: "/for-providers" },
+  { label: "Help", href: "/help" },
 ];
 
 export const PUBLIC_FOOTER_COLUMNS: Array<{ title: string; links: PublicLink[] }> = [
@@ -24,24 +24,18 @@ export const PUBLIC_FOOTER_COLUMNS: Array<{ title: string; links: PublicLink[] }
   {
     title: "Company",
     links: [
-      { label: "For providers", href: null },
+      { label: "For providers", href: "/for-providers" },
       { label: "About MedNet", href: "/about" },
-      { label: "Contact", href: null },
+      { label: "Contact", href: "/contact" },
     ],
   },
   {
     title: "Support and policies",
     links: [
-      { label: "Help center", href: null },
-      { label: "Privacy", href: null },
-      { label: "Accessibility", href: null },
-      { label: "Terms of service", href: null },
+      { label: "Help center", href: "/help" },
+      { label: "Privacy", href: "/privacy" },
+      { label: "Accessibility", href: "/accessibility" },
+      { label: "Terms of service", href: "/terms" },
     ],
   },
 ];
-
-export function routedLinks(links: PublicLink[]) {
-  return links.filter(
-    (link): link is { label: string; href: string } => link.href !== null,
-  );
-}

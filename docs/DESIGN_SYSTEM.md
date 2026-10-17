@@ -157,7 +157,7 @@ values exist as utilities.
 | Radius | `--radius-sm` 8px, `--radius-md` 12px, `--radius-full` | `rounded-sm`, `rounded-md` |
 | Shadow | `--shadow-card`, `--shadow-overlay` | `shadow-card`, `shadow-overlay` |
 | Breakpoints | `--breakpoint-md` 48rem, `--breakpoint-lg` 75rem, `--breakpoint-xl` 90rem | `md:`, `lg:`, `xl:` |
-| Layout | `--container-page` 77.5rem (≈1176px content + 32px gutters), `--container-content` 1480px, `--width-sidebar` 15.75rem, `--width-sidebar-rail` 4.5rem | `max-w-page` |
+| Layout | `--container-page` 77.75rem (1180px content + 32px gutters; was 77.5rem until 2026-10-17), `--container-content` 1480px, `--width-sidebar` 15.75rem, `--width-sidebar-rail` 4.5rem | `max-w-page` |
 
 Global behaviour:
 
@@ -173,10 +173,10 @@ Shared layouts (`web/src/components/layout`):
 
 | Component | Reference | Interpretation or deviation |
 |---|---|---|
-| `PublicHeader` | Navigation/Public header | **Interpretation:** a menu toggle at compact widths. The reference hides the links with no replacement, which would leave Sign in unreachable on phones. Links without a page yet ("For providers", "Help") are not rendered. "Book an appointment" goes to `/services` until the booking flow exists. |
-| `PublicFooter` | Public footer | Only columns and links with existing pages are rendered. Policy links (Privacy, Terms, Accessibility) wait for approved policy content. The "Prototype content is fictional" note is dropped on the live site. |
+| `PublicHeader` | Navigation/Public header | **Interpretation:** a menu toggle below 1200px (where the reference hides the four links with no replacement), so navigation and, on phones, Sign in stay reachable. All four reference links are rendered (2026-10-17); "For providers" and "Help" go to placeholder pages (§14.4). Below 1200px the reference left-aligns Sign in/Book beside the wordmark; they stay right-aligned. "Book an appointment" goes to `/find-care`. |
+| `PublicFooter` | Public footer | All reference columns and links are rendered (2026-10-17); links without approved content go to placeholder pages (§14.4). The "Prototype content is fictional" note is dropped on the live site. Bottom padding is 56px, not 95px: the reference's extra space only clears the prototype's floating screen switcher. |
 | `WorkspaceShell` | Navigation/Dashboard sidebar + top bar | **Fixes:** the sidebar is sticky and fills the viewport height. **Responsive adjustment:** a 72px icon rail below 1200px (the reference keeps the full 244px sidebar at 820px, squeezing content). The wordmark is white on the sidebar; the reference's dark-green-on-dark-green patient wordmark fails contrast. The prototype's "Switch workspace" select is not built, because the backend gives each account one role. |
-| `Wordmark` | MedNet logotype | Text wordmark only; "M" in the collapsed rail. |
+| `Wordmark` | MedNet logotype | Text wordmark only; "M" in the collapsed rail. Dark tone is green-900 with −0.04em (−1px) tracking, as measured in the public header and footer (2026-10-17). |
 | `FictionalDataBadge` | "Fictional data" chip | Required on every presentation-only screen. |
 
 ## 11. Presentation-only data convention
@@ -355,12 +355,12 @@ interpretation built only from approved tokens and Phase 3 components (`features
 | Element | Reference (1440px) | Implemented |
 |---|---|---|
 | Hero background | `linear-gradient(105deg, #F9FAF8, #F2F6F3 56%, #E7F2ED)` | same |
-| Display headline | 72/71px, 600, −0.045em, green-950 | same at 1440; 56px at 768–1439, 44px on phones (the reference 390 view is ~44px) |
+| Display headline | 72/71px, 600, −0.045em, green-950; 46px on phones, `clamp(50px, 5vw, 72px)` from 768px | same (2026-10-17) |
 | Lede | 20/31px, ink-soft, 600px max | same (18px on phones) |
 | Search bar | 909px white card, overlay shadow, "Find a doctor" primary button | same width; one field (see 14.2) |
 | Photo | 435×500, radius 210/210/22/22, shadow `0 28px 60px rgba(20,70,52,.14)`, bleeds off the right edge | same; centred and narrower below 1200px |
 | Floating card | 285×91, 12px radius, 96% white, overlay shadow | same shape (content in 14.2) |
-| Section titles | 36/41px, 400, −0.9px | same (30px on phones) |
+| Section titles | 36/41.4px, 400, −0.9px at every width | same (2026-10-17) |
 | Category title | 18/27px, 700 | same |
 | Dark band | green-950, 48px padding, 17px titles | same |
 | Steps | warm surface `#F6F4EE`, 88px padding, 13px bold green numbers, 22/33px titles | same |
@@ -380,8 +380,32 @@ unchanged because it is the stated scale for other display uses.
 | "Representative providers" with fictional profiles, fees, "Profile verified", "View profile" | "Approved providers", real profiles, real next open time, no fee, "See open times" | no fees/payments; no profile page or endpoint |
 | Band: verified profiles · suitable location · transparent fixed fees · provider payout tracking | approved profiles · in person or by text · records shared with consent · laboratory and home care | payments out of scope; replacements are implemented capabilities |
 | Steps: "Book securely… authorize payment"; "Join online… prescriptions" | "Request a time… the doctor confirms"; "Attend in person or join the text consultation… released results" | no payments or prescribing |
-| Header "For providers", "Help"; footer Contact, Help center, Privacy, Accessibility, Terms | hidden | no pages or approved policy content (§10) |
+| Header "For providers", "Help"; footer Contact, Help center, Privacy, Accessibility, Terms | linked to placeholder pages stating the content is pending approval (user decision 2026-10-17) | no approved content; nothing is invented (§14.4) |
 | Footer "Prototype content is fictional" | removed | live data |
+
+### 14.4 Fidelity correction (2026-10-17)
+
+The homepage, header and footer were re-measured against the reference at 1440, 1024, 768 and 390px
+(computed geometry of both pages, same viewport) and corrected. Remaining offsets inside each section are
+within 0–3px at all four widths.
+
+| Area | Reference | Was | Now |
+|---|---|---|---|
+| Content width | 1180px at 1440 (`--container-page` 1244px incl. 32px gutters) | 1176px | 1180px (token updated; applies app-wide) |
+| Header | 81px + 1px `line-soft` rule, 95% white; links 15/22.5 semibold, 8px vertical padding, 28px apart, 42px after the wordmark; links from 1200px; Sign in a 44px text button 10px before Book; 69px on phones with a 13px Book button | 72px, 14px links 24px apart, links from 768px (they overflow there with four links) | as the reference |
+| Hero | from 1200px a 650px band, text column (70px padding) and photo centred vertically; 78/100px top padding on phones/tablets; photo 310×390 on phones, 435×500 above, flush with the band's bottom edge on tablets; eyebrow 12/18 with 0.11em tracking and a 23px rule; card on the photo's bottom edge, 43px icon tile, 12/15/12px lines | top-weighted padding (704px tall), 11px eyebrow, 44/56px headline | as the reference |
+| Section eyebrows | 12px, 0.11em, in a 24px line box | 11px, 0.08em | `Eyebrow size="section"` (workspace eyebrows unchanged) |
+| Category cards | 22px padding, gaps 14/6px, 14/19.6 description, muted 18px chevron 29px below | 23px padding, 20/4px gaps, ink chevron | as the reference (icon tile keeps the approved 8px radius; the reference uses 10px) |
+| Dark band | 4 equal columns 32px apart, 42px tiles on white/8% with `#8BD9BA` icons, 13/19.5 text in `#BDD0C8` | 44px gaps, 44px tiles, 14px `green-100` text | as the reference (new tokens `green-300`, `ink-inverse-soft`) |
+| Steps | 88px padding at every width, 24px under a `#D6D2C8` rule, 28px number-to-title, 16/25.6 text max 320px | 64px below 1200px, 32px, 36px | as the reference (token `line-warm`) |
+| Footer | 55px top padding; 1.5fr + 3×1fr with 55px gaps (1.4fr + 2×1fr with Support under the brand on tablets; brand row then 2 columns 30px apart on phones); bold 13px headings 15px above links 9px apart; divider inside the content width; 12px bottom row, stacked on phones | 48px, 1.4fr grid, 40px gaps, semibold headings, divider across the gutters | as the reference |
+
+Placeholder pages (`/for-providers`, `/help`, `/contact`, `/privacy`, `/accessibility`, `/terms`) use
+`PageIntro` and say only that the content is being prepared and not yet approved, with links to Find
+care and How it works. They are `noindex`. They must be replaced, not extended, once content is approved.
+
+Not changed, by earlier decision: the single search field, content in §14.2, the mobile menu toggle, and
+44px minimum targets on "View all services" (the reference's link is 38px tall).
 
 ### 14.3 Interpreted pages
 

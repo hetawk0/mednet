@@ -87,8 +87,28 @@ test.describe("public pages", () => {
       if (href.startsWith("/api/")) continue;
       expect((await request.get(href)).status(), href).toBe(200);
     }
-    for (const missing of ["For providers", "Help", "Contact", "Privacy", "Terms of service"]) {
-      await expect(p.getByRole("link", { name: missing, exact: true })).toHaveCount(0);
+    // Every reference footer link is present and routed (placeholders where content is pending).
+    const footer = p.getByRole("contentinfo");
+    for (const [name, href] of [
+      ["For providers", "/for-providers"],
+      ["Contact", "/contact"],
+      ["Help center", "/help"],
+      ["Privacy", "/privacy"],
+      ["Accessibility", "/accessibility"],
+      ["Terms of service", "/terms"],
+    ]) {
+      await expect(footer.getByRole("link", { name, exact: true })).toHaveAttribute("href", href);
+    }
+  });
+
+  test("placeholder pages say their content is pending and invent nothing", async ({ page: p }) => {
+    await stubApi(p);
+    for (const path of ["/for-providers", "/help", "/contact", "/privacy", "/accessibility", "/terms"]) {
+      await p.goto(path);
+      await expect(p.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(p.getByText("Its content has not been approved for publication yet.")).toBeVisible();
+      await expectNoHorizontalScroll(p);
+      await expectNoAxeViolations(p);
     }
   });
 
