@@ -160,7 +160,7 @@ export function ReportsPageView() {
     <>
       <AdminPageHeading
         title="Reports"
-        description="Live operational counts and recent administrative activity. Operational CSV exports are available from their list views; aggregate report exports are not available."
+        description="Aggregate account, appointment, service-request and laboratory activity with date filters and CSV export. Operational exports remain available from their list views."
       />
       <ReportsView />
     </>

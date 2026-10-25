@@ -98,6 +98,23 @@ export type AuditEvent = {
   createdAt: string;
 };
 
+export type AggregatePoint = {
+  month: string;
+  category: string;
+  status: string;
+  count: number;
+};
+
+export type AdminAggregateReport = {
+  from: string;
+  through: string;
+  generatedAt: string;
+  accounts: AggregatePoint[];
+  appointments: AggregatePoint[];
+  serviceRequests: AggregatePoint[];
+  laboratoryResults: AggregatePoint[];
+};
+
 export type AccountFilters = {
   search?: string;
   status?: string;
@@ -121,6 +138,11 @@ const id = encodeURIComponent;
 
 export const adminApi = {
   overview: (signal?: Signal) => apiRequest<AdminOverview>("/admin/overview", { signal }),
+  aggregateReport: (filters: { from?: string; through?: string }, signal?: Signal) =>
+    apiRequest<AdminAggregateReport>("/admin/reports", {
+      query: { from: filters.from || undefined, through: filters.through || undefined },
+      signal,
+    }),
 
   /** Paged and complete (Phase 5D); `search` matches name, email, specialty or credential reference. */
   providersPage: (filters: { status?: string; search?: string }, page: number, size: number, signal?: Signal) =>

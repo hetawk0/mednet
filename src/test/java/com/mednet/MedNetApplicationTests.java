@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.sql.Timestamp;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -2097,6 +2098,78 @@ class MedNetApplicationTests {
                 .findFirst()
                 .orElseThrow();
         assertThat(notificationEmailOutbox.findByNotificationId(unverifiedNotification.id())).isEmpty();
+    }
+
+    @Test
+    void aggregateReportsAreDateBoundedAdminOnlyAndExcludeIdentifiableClinicalData() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        PlatformAccountEntity patient = verifiedAccount("report-patient-" + suffix + "@mednet.test", "PATIENT");
+        PlatformAccountEntity laboratory = verifiedAccount("report-lab-" + suffix + "@mednet.test", "LABORATORY");
+        ProviderApplicationEntity provider = approvedProvider("Report provider " + suffix, "General medicine");
+        Instant slotStart = Instant.now().plusSeconds(10_000);
+        ProviderAvailabilitySlotEntity slot = availabilitySlots.saveAndFlush(new ProviderAvailabilitySlotEntity(
+                UUID.randomUUID().toString(), provider.getId(), slotStart, slotStart.plusSeconds(1_800)));
+        appointments.saveAndFlush(new AppointmentEntity(
+                UUID.randomUUID().toString(), patient.getId(), provider.getId(), slot.getId()));
+        PatientServiceRequestEntity request = serviceRequests.saveAndFlush(new PatientServiceRequestEntity(
+                UUID.randomUUID().toString(), patient.getId(), "LABORATORY", "Blood test", "Monrovia"));
+        LaboratoryResultEntity result = labResults.saveAndFlush(new LaboratoryResultEntity(
+                UUID.randomUUID().toString(), request.getId(), patient.getId(), laboratory.getId(),
+                "private result that must never appear in aggregate output"));
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+
+        MvcResult response = mockMvc.perform(get("/api/v1/admin/reports")
+                        .param("from", today.toString())
+                        .param("through", today.toString())
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andReturn();
+        String reportJson = response.getResponse().getContentAsString();
+        assertThat(reportJson)
+                .contains("\"category\":\"PATIENT\"")
+                .contains("\"category\":\"TEXT\"")
+                .contains("\"category\":\"LABORATORY\"")
+                .contains("\"status\":\"PENDING_REVIEW\"")
+                .doesNotContain(patient.getEmail())
+                .doesNotContain(laboratory.getEmail())
+                .doesNotContain(patient.getId())
+                .doesNotContain(result.getSummary());
+
+        MvcResult csv = mockMvc.perform(get("/api/v1/admin/reports/export.csv")
+                        .param("from", today.toString())
+                        .param("through", today.toString())
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", org.hamcrest.Matchers.containsString("text/csv")))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".csv")))
+                .andReturn();
+        assertThat(csv.getResponse().getContentAsString())
+                .contains("Period,Dataset,Category,Status,Count")
+                .contains("laboratory_results")
+                .doesNotContain(patient.getEmail())
+                .doesNotContain(result.getSummary());
+
+        mockMvc.perform(get("/api/v1/admin/reports").param("from", today.toString())
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/admin/reports")
+                        .param("from", today.toString())
+                        .param("through", today.minusDays(1).toString())
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/admin/reports")
+                        .param("from", today.minusDays(731).toString())
+                        .param("through", today.toString())
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/admin/reports")
+                        .param("from", LocalDate.MAX.toString())
+                        .param("through", LocalDate.MAX.toString())
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/admin/reports")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isForbidden());
     }
 
     @Test

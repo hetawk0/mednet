@@ -94,6 +94,16 @@ summaries, medication/vital data, and hidden requester details. Cells are RFC 41
 spreadsheet formula-leading values are neutralized. These list exports do not implement RPT-08
 reporting data or add aggregate metrics.
 
+The admin Reports page also calls `GET /admin/reports` with optional ISO `from` and `through`
+dates. Supply both or neither; the default is the latest 12 calendar months, dates are inclusive
+and grouped by UTC month, and ranges are limited to 731 days. It returns monthly counts for
+accounts (account type/status), appointments (consultation mode/status), patient service requests
+(request type/status), and laboratory results (status). No identifiers or clinical text are
+included. `GET /admin/reports/export.csv` returns the same aggregate report as CSV; both routes
+are admin-only. This is the initial approved aggregate scope, not a claim that all proposed
+RPT-01–RPT-07 are complete: provider-specific totals, overdue/action queues, and missed or
+completed consultation definitions still need client confirmation in `req.md`.
+
 Phase 5C (home care): no endpoint or contract change. The web client now uses the existing partner
 endpoints for `HOME_CARE` accounts at `/home-care`: `GET /partner/service-requests?type=HOME_CARE`
 (own assignments: `requestedService`, `locationDescription`, `status`, `scheduledAt`, dates; no patient

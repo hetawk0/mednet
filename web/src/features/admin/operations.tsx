@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { AppointmentStatusBadge } from "@/components/healthcare/status";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { DataTable, type DataColumn } from "@/components/ui/data-table";
 import { SearchInput, SelectField } from "@/components/ui/inputs";
@@ -14,7 +15,7 @@ import { consultationModeLabel } from "@/features/find-care/format";
 import { useDebouncedValue, usePageFor } from "@/features/workspace/paging";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { useResource } from "@/features/workspace/use-resource";
-import { adminApi, type AdminAppointment, type AdminOverview, type AuditEvent } from "./admin-api";
+import { adminApi, type AdminAggregateReport, type AdminAppointment, type AdminOverview, type AggregatePoint, type AuditEvent } from "./admin-api";
 import { CsvExportButton } from "./csv-export-button";
 import { exportAllAppointments, exportAllAuditEvents } from "./csv-export";
 import { formatAdminDateTime } from "./frame";
@@ -240,9 +241,44 @@ export function ConfigurationView() {
   );
 }
 
-/** Reports (administrator): live counts from the overview plus the recent audit trail. No export. */
+/** Admin reports are aggregate-only; no patient, account, message, or clinical text is returned. */
 export function ReportsView() {
   const { resource, reload } = useOverview();
+  const [fromInput, setFromInput] = useState("");
+  const [throughInput, setThroughInput] = useState("");
+  const [range, setRange] = useState<{ from?: string; through?: string }>({});
+  const report = useResource(
+    (signal) => adminApi.aggregateReport(range, signal),
+    JSON.stringify(range),
+  );
+  const reportData = report.resource.state === "ready" ? report.resource.data : null;
+
+  function applyRange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setRange({
+      from: fromInput || undefined,
+      through: throughInput || undefined,
+    });
+  }
+
+  const reportRows = (data: AdminAggregateReport) => {
+    const datasets: Array<{ dataset: string; points: AggregatePoint[] }> = [
+      { dataset: "Accounts", points: data.accounts },
+      { dataset: "Appointments", points: data.appointments },
+      { dataset: "Service requests", points: data.serviceRequests },
+      { dataset: "Laboratory results", points: data.laboratoryResults },
+    ];
+    return datasets.flatMap(({ dataset, points }) =>
+      points.map((point) => [
+        point.month,
+        dataset,
+        point.category,
+        point.status,
+        point.count,
+      ]),
+    );
+  };
+
   return (
     <div className="flex flex-col gap-6">
       {resource.state === "loading" ? (
@@ -259,7 +295,93 @@ export function ReportsView() {
       ) : (
         <StateMessage kind="empty" title="Counts are unavailable" description="The API reports that its database is not configured." />
       )}
+      <Card className="flex flex-col gap-5">
+        <CardHeader eyebrow="Aggregate reporting" title="Monthly activity" />
+        <p className="text-caption text-text-secondary">
+          Counts are grouped by UTC creation month, category and status. No patient identifiers, message content,
+          laboratory result text or other clinical details are included. The default range is the latest 12 calendar months.
+        </p>
+        <form onSubmit={applyRange} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <label className="grid gap-1.5 text-caption font-semibold text-ink">
+            From
+            <input
+              type="date"
+              value={fromInput}
+              onChange={(event) => setFromInput(event.target.value)}
+              className="min-h-11 rounded-sm border border-border px-3 text-data"
+            />
+          </label>
+          <label className="grid gap-1.5 text-caption font-semibold text-ink">
+            Through
+            <input
+              type="date"
+              value={throughInput}
+              onChange={(event) => setThroughInput(event.target.value)}
+              className="min-h-11 rounded-sm border border-border px-3 text-data"
+            />
+          </label>
+          <Button type="submit" variant="secondary">Apply date range</Button>
+        </form>
+        {report.resource.state === "loading" ? (
+          <LoadingRows label="Loading aggregate report" />
+        ) : report.resource.state === "error" ? (
+          <ErrorRow title="The aggregate report could not be loaded" status={report.resource.status} onRetry={report.reload} />
+        ) : reportData ? (
+          <>
+            <p className="text-caption text-text-secondary" aria-live="polite">
+              {reportData.from} through {reportData.through} · generated {formatAdminDateTime(reportData.generatedAt)}
+            </p>
+            <div className="flex justify-end">
+              <CsvExportButton
+                filename={`mednet-aggregate-${reportData.from}-to-${reportData.through}`}
+                headers={["Month (UTC)", "Dataset", "Category", "Status", "Count"]}
+                loadRows={async () => reportRows(reportData)}
+              />
+            </div>
+            <AggregateReportSection title="Accounts" points={reportData.accounts} />
+            <AggregateReportSection title="Appointments" points={reportData.appointments} />
+            <AggregateReportSection title="Home-care and laboratory requests" points={reportData.serviceRequests} />
+            <AggregateReportSection title="Laboratory results" points={reportData.laboratoryResults} />
+          </>
+        ) : (
+          <StateMessage kind="empty" title="Aggregate report is unavailable." />
+        )}
+      </Card>
       <AuditTrail title="Recent administrative activity" />
     </div>
+  );
+}
+
+function AggregateReportSection({ title, points }: { title: string; points: AggregatePoint[] }) {
+  return (
+    <section aria-label={title}>
+      <h3 className="text-heading text-ink">{title}</h3>
+      {points.length ? (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[32rem] border-collapse text-left text-caption">
+            <thead>
+              <tr className="border-b border-border text-text-secondary">
+                <th scope="col" className="py-2 pr-4">Month (UTC)</th>
+                <th scope="col" className="py-2 pr-4">Category</th>
+                <th scope="col" className="py-2 pr-4">Status</th>
+                <th scope="col" className="py-2 text-right">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {points.map((point) => (
+                <tr key={`${point.month}:${point.category}:${point.status}`} className="border-b border-line-soft">
+                  <td className="py-2 pr-4">{point.month}</td>
+                  <td className="py-2 pr-4">{point.category.replaceAll("_", " ")}</td>
+                  <td className="py-2 pr-4">{point.status.replaceAll("_", " ")}</td>
+                  <td className="py-2 text-right tabular-nums">{point.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <StateMessage kind="empty" layout="inline" className="mt-2" title="No activity for this dataset and period." />
+      )}
+    </section>
   );
 }
