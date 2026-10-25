@@ -662,6 +662,10 @@ class MedNetApplicationTests {
     void patientRequestAndMedicationHistoriesSupportOptionalValidatedPagination() throws Exception {
         PlatformAccountEntity patient = verifiedAccount(
                 "history-pagination-" + UUID.randomUUID() + "@mednet.test", "PATIENT");
+        PlatformAccountEntity homeCareStaff = verifiedAccount(
+                "partner-pagination-" + UUID.randomUUID() + "@mednet.test", "HOME_CARE");
+        PlatformAccountEntity queuePatient = verifiedAccount(
+                "partner-queue-patient-" + UUID.randomUUID() + "@mednet.test", "PATIENT");
         for (int index = 0; index < 27; index++) {
             serviceRequests.save(new PatientServiceRequestEntity(
                     UUID.randomUUID().toString(),
@@ -675,6 +679,14 @@ class MedNetApplicationTests {
                     "LABORATORY",
                     "Test " + index,
                     null));
+            PatientServiceRequestEntity assigned = new PatientServiceRequestEntity(
+                    UUID.randomUUID().toString(),
+                    queuePatient.getId(),
+                    "HOME_CARE",
+                    "Assigned request " + index,
+                    "Monrovia");
+            assigned.assignTo(homeCareStaff.getId());
+            serviceRequests.save(assigned);
         }
         MedicationScheduleEntity schedule = medicationSchedules.saveAndFlush(new MedicationScheduleEntity(
                 UUID.randomUUID().toString(),
@@ -713,6 +725,20 @@ class MedNetApplicationTests {
                 .andExpect(jsonPath("$.totalElements").value(27))
                 .andExpect(jsonPath("$.totalPages").value(3))
                 .andExpect(jsonPath("$.content.length()").value(10));
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                        .param("type", "HOME_CARE")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .with(user(homeCareStaff.getEmail()).roles("HOME_CARE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(27))
+                .andExpect(jsonPath("$.content.length()").value(10))
+                .andExpect(jsonPath("$.content[0].patientAccountId").doesNotExist());
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                        .param("type", "HOME_CARE")
+                        .with(user(homeCareStaff.getEmail()).roles("HOME_CARE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(27));
         mockMvc.perform(get("/api/v1/home-care-requests").param("page", "0").param("size", "101")
                         .with(user(patient.getEmail()).roles("PATIENT")))
                 .andExpect(status().isBadRequest());

@@ -287,6 +287,35 @@ public class PatientServiceRequestService {
     }
 
     @Transactional
+    public Page<PartnerRequestDetails> pageAssigned(
+            String email, String requestType, int page, int size) {
+        String type = normalizeType(requestType);
+        PlatformAccountEntity staff = requirePartnerAccount(email, type);
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be 0 or more and size 1 to 100");
+        }
+        audit(email, "service_request.partner_queue_accessed", staff.getId());
+        Page<PatientServiceRequestEntity> assigned = requests
+                .findByAssignedStaffAccountIdAndRequestTypeOrderByCreatedAtDesc(
+                        staff.getId(),
+                        type,
+                        PageRequest.of(
+                                page,
+                                size,
+                                Sort.by(Sort.Direction.DESC, "createdAt")
+                                        .and(Sort.by(Sort.Direction.DESC, "id"))));
+        Map<String, LatestResult> latest = new java.util.HashMap<>();
+        if ("LABORATORY".equals(type) && !assigned.isEmpty()) {
+            for (var result : labResults.findByRequestIdInOrderByCreatedAtDesc(
+                    assigned.getContent().stream().map(PatientServiceRequestEntity::getId).toList())) {
+                latest.putIfAbsent(result.getRequestId(), new LatestResult(
+                        result.getId(), result.getStatus(), result.getCreatedAt(), result.getReviewedAt()));
+            }
+        }
+        return assigned.map(request -> partnerDetails(request, latest.get(request.getId())));
+    }
+
+    @Transactional
     public PartnerRequestDetails updateAssignedStatus(String email, String requestId, String status) {
         PatientServiceRequestEntity request = requests.findByIdForUpdate(requestId)
                 .orElseThrow(PatientServiceRequestService::notFound);

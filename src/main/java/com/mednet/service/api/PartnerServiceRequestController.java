@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +42,15 @@ public class PartnerServiceRequestController {
             @RequestParam String type,
             Authentication actor) {
         return service.listAssigned(actor.getName(), type);
+    }
+
+    @GetMapping(params = "page")
+    public Page<PartnerRequestDetails> assignedRequestsPage(
+            @RequestParam String type,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication actor) {
+        return service.pageAssigned(actor.getName(), type, page, size);
     }
 
     @PatchMapping("/{id}/schedule")
