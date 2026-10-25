@@ -7,8 +7,9 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Limits for the authentication and email-delivery endpoints ({@code mednet.rate-limit.*}). Counters
- * live in one API process; see docs/SECURITY_AUDIT.md before running more than one instance.
+ * Limits for the authentication and email-delivery endpoints ({@code mednet.rate-limit.*}). PostgreSQL
+ * deployments share counters across API instances; no-database and non-PostgreSQL contexts use bounded
+ * in-memory counters for local development and tests.
  */
 @ConfigurationProperties("mednet.rate-limit")
 public class AuthRateLimitProperties {

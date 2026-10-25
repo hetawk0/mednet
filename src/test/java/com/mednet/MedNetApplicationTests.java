@@ -26,7 +26,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -57,6 +56,8 @@ import com.mednet.laboratory.data.LaboratoryResultEntity;
 import com.mednet.laboratory.data.LaboratoryResultRepository;
 import com.mednet.service.data.PatientServiceRequestEntity;
 import com.mednet.service.data.PatientServiceRequestRepository;
+
+import jakarta.servlet.http.Cookie;
 import com.mednet.appointment.app.AppointmentReminderService;
 import com.mednet.medication.app.MedicationService;
 import com.mednet.medication.data.MedicationScheduleEntity;
@@ -2817,10 +2818,10 @@ class MedNetApplicationTests {
                 .andExpect(status().isNoContent())
                 .andReturn();
 
-        MockHttpSession session = (MockHttpSession) loginResult.getRequest().getSession(false);
+        Cookie session = loginResult.getResponse().getCookie("SESSION");
         assertThat(session).isNotNull();
 
-        mockMvc.perform(get("/api/v1/admin/overview").session(session))
+        mockMvc.perform(get("/api/v1/admin/overview").cookie(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.apiStatus").value("UP"))
                 .andExpect(jsonPath("$.modules[0].status").value("CONNECTED"))
@@ -2831,7 +2832,7 @@ class MedNetApplicationTests {
                 .andExpect(jsonPath("$.modules[10].status").value("CONNECTED"))
                 .andExpect(jsonPath("$.modules[11].status").value("DISABLED"));
 
-        mockMvc.perform(get("/api/v1/auth/admin/session").session(session))
+        mockMvc.perform(get("/api/v1/auth/admin/session").cookie(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("SUPER_ADMIN"));
 

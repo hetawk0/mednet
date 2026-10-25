@@ -1,6 +1,5 @@
 package com.mednet.laboratory.data;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,7 +56,9 @@ public interface LaboratoryResultRepository extends JpaRepository<LaboratoryResu
             select patient.id as patientAccountId,
                    case when consent.id is null then false else true end as recordAccess,
                    count(distinct case when consent.id is not null then result.id end) as pendingResults,
-                   min(case when consent.id is not null then result.created_at end) as oldestPendingAt
+                   cast(extract(epoch from min(
+                       case when consent.id is not null then result.created_at end
+                   )) * 1000 as bigint) as oldestPendingAtEpochMillis
             from platform_accounts patient
             join appointments appointment
               on appointment.patient_account_id = patient.id
@@ -151,6 +152,6 @@ public interface LaboratoryResultRepository extends JpaRepository<LaboratoryResu
 
         long getPendingResults();
 
-        OffsetDateTime getOldestPendingAt();
+        Long getOldestPendingAtEpochMillis();
     }
 }

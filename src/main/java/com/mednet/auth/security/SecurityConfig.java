@@ -32,6 +32,9 @@ import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
+import org.springframework.session.security.SpringSessionBackedSessionRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,10 +68,14 @@ public class SecurityConfig {
         return Clock.systemUTC();
     }
 
-    /** Signed-in sessions per account, so {@link AccountSessions} can end them. */
+    /** Shared session index lets account changes invalidate sessions on every API instance. */
     @Bean
-    SessionRegistry sessionRegistry() {
-        return new SessionRegistryImpl();
+    SessionRegistry sessionRegistry(
+            ObjectProvider<FindByIndexNameSessionRepository<? extends Session>> repositories) {
+        FindByIndexNameSessionRepository<? extends Session> repository = repositories.getIfAvailable();
+        return repository == null
+                ? new SessionRegistryImpl()
+                : new SpringSessionBackedSessionRegistry<>(repository);
     }
 
     /** Removes destroyed sessions from the registry, keeping it bounded by live sessions. */
@@ -117,7 +124,7 @@ public class SecurityConfig {
                                 normalizedUsername, "APPROVED").isPresent();
                 role = approvedProvider ? "PROVIDER" : "PATIENT";
             }
-            return User.withUsername(account.getEmail())
+            return User.withUsername(normalizedUsername)
                     .password(account.getPasswordHash())
                     .roles(role)
                     .disabled("SUSPENDED".equals(account.getStatus()))

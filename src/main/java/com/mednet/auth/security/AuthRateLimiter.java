@@ -7,20 +7,19 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.mednet.auth.security.AuthRateLimitProperties.Limit;
+import com.mednet.auth.security.RateLimitCounterStore.Counter;
 
 /**
- * Fixed-window counters for authentication abuse protection, held in memory with a bounded number of
- * keys. Accounts are keyed by a hash of the normalized email, so no address is kept or logged.
- * Limits expire on their own; nothing here locks an account permanently.
+ * Fixed-window authentication abuse protection. Counter keys are hashed before reaching the backing
+ * store, so email addresses and client addresses are neither stored nor logged.
  */
 @Component
 public class AuthRateLimiter {
@@ -29,18 +28,18 @@ public class AuthRateLimiter {
 
     private final AuthRateLimitProperties properties;
     private final Clock clock;
-    private final Map<String, Window> windows;
+    private final RateLimitCounterStore counters;
 
-    public AuthRateLimiter(AuthRateLimitProperties properties, Clock clock) {
+    @Autowired
+    public AuthRateLimiter(AuthRateLimitProperties properties, Clock clock, RateLimitCounterStore counters) {
         this.properties = properties;
         this.clock = clock;
-        int maxKeys = Math.max(1, properties.getMaxTrackedKeys());
-        this.windows = new LinkedHashMap<>(256, 0.75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, Window> eldest) {
-                return size() > maxKeys;
-            }
-        };
+        this.counters = counters;
+    }
+
+    /** In-memory constructor retained for isolated unit tests. */
+    public AuthRateLimiter(AuthRateLimitProperties properties, Clock clock) {
+        this(properties, clock, new InMemoryRateLimitCounterStore(properties.getMaxTrackedKeys()));
     }
 
     public AuthRateLimitProperties properties() {
@@ -53,15 +52,12 @@ public class AuthRateLimiter {
             return;
         }
         Instant now = clock.instant();
-        synchronized (windows) {
-            Window window = current(bucket, scope, key, limit, now);
-            if (window.count >= limit.getRequests()) {
-                throw exceeded(window, limit, now);
-            }
-            window.count++;
-            if (window.count == limit.getRequests()) {
-                log.warn("Authentication rate limit reached for {} per {}", bucket, scope);
-            }
+        Counter counter = counters.increment(bucket, scope, counterKey(key), now, limit);
+        if (counter.count() > limit.getRequests()) {
+            throw exceeded(counter, limit, now);
+        }
+        if (counter.count() == limit.getRequests()) {
+            log.warn("Authentication rate limit reached for {} per {}", bucket, scope);
         }
     }
 
@@ -71,11 +67,9 @@ public class AuthRateLimiter {
             return;
         }
         Instant now = clock.instant();
-        synchronized (windows) {
-            Window window = windows.get(bucket + '|' + scope + '|' + key);
-            if (window != null && !window.expired(limit, now) && window.count >= limit.getRequests()) {
-                throw exceeded(window, limit, now);
-            }
+        Counter counter = counters.find(bucket, scope, counterKey(key), now, limit).orElse(null);
+        if (counter != null && counter.count() >= limit.getRequests()) {
+            throw exceeded(counter, limit, now);
         }
     }
 
@@ -85,25 +79,18 @@ public class AuthRateLimiter {
             return;
         }
         Instant now = clock.instant();
-        synchronized (windows) {
-            Window window = current(bucket, scope, key, limit, now);
-            window.count++;
-            if (window.count == limit.getRequests()) {
-                log.warn("Authentication rate limit reached for {} per {}", bucket, scope);
-            }
+        Counter counter = counters.increment(bucket, scope, counterKey(key), now, limit);
+        if (counter.count() == limit.getRequests()) {
+            log.warn("Authentication rate limit reached for {} per {}", bucket, scope);
         }
     }
 
     public void reset(String bucket, String scope, String key) {
-        synchronized (windows) {
-            windows.remove(bucket + '|' + scope + '|' + key);
-        }
+        counters.reset(bucket, scope, counterKey(key));
     }
 
     int trackedKeys() {
-        synchronized (windows) {
-            return windows.size();
-        }
+        return Math.toIntExact(counters.trackedCounters());
     }
 
     /** A stable, non-reversible key for an email address. */
@@ -118,32 +105,18 @@ public class AuthRateLimiter {
         }
     }
 
-    private Window current(String bucket, String scope, String key, Limit limit, Instant now) {
-        String mapKey = bucket + '|' + scope + '|' + key;
-        Window window = windows.get(mapKey);
-        if (window == null || window.expired(limit, now)) {
-            window = new Window(now);
-            windows.put(mapKey, window);
+    private static String counterKey(String key) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest((key == null ? "" : key).getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
-        return window;
     }
 
-    private static RateLimitExceededException exceeded(Window window, Limit limit, Instant now) {
-        long seconds = Duration.between(now, window.start.plus(limit.getWindow())).toSeconds() + 1;
+    private static RateLimitExceededException exceeded(Counter counter, Limit limit, Instant now) {
+        long seconds = Duration.between(now, counter.startedAt().plus(limit.getWindow())).toSeconds() + 1;
         return new RateLimitExceededException(Math.max(1, seconds));
-    }
-
-    private static final class Window {
-
-        private final Instant start;
-        private int count;
-
-        private Window(Instant start) {
-            this.start = start;
-        }
-
-        private boolean expired(Limit limit, Instant now) {
-            return !now.isBefore(start.plus(limit.getWindow()));
-        }
     }
 }

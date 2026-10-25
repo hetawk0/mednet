@@ -1,7 +1,9 @@
 package com.mednet.auth.security;
 
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -14,6 +16,7 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -54,7 +57,7 @@ public class GoogleOAuth2UserService {
             account = accounts.findFirstByEmailIgnoreCase(normalizedEmail).orElse(null);
             if (account == null) {
                 if (!adminEmail.isBlank() && adminEmail.equals(normalizedEmail)) {
-                    return withRole(googleUser, "SUPER_ADMIN");
+                    return withRole(googleUser, "SUPER_ADMIN", normalizedEmail);
                 }
                 throw authenticationError(
                         "No MedNet account is linked to this Google email. Create an account first.");
@@ -82,15 +85,20 @@ public class GoogleOAuth2UserService {
         }
 
         String role = resolveRole(account, normalizedEmail);
-        return withRole(googleUser, role);
+        return withRole(googleUser, role, normalizedEmail);
     }
 
-    private static OidcUser withRole(OidcUser googleUser, String role) {
+    private static OidcUser withRole(OidcUser googleUser, String role, String normalizedEmail) {
         Set<GrantedAuthority> authorities = new HashSet<>(googleUser.getAuthorities());
         authorities.removeIf(authority -> authority.getAuthority().equals("ROLE_USER"));
         authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+        Map<String, Object> userInfoClaims = new HashMap<>(googleUser.getUserInfo().getClaims());
+        userInfoClaims.put("mednet_email", normalizedEmail);
         return new DefaultOidcUser(
-                authorities, googleUser.getIdToken(), googleUser.getUserInfo(), "email");
+                authorities,
+                googleUser.getIdToken(),
+                new OidcUserInfo(userInfoClaims),
+                "mednet_email");
     }
 
     private String resolveRole(PlatformAccountEntity account, String email) {

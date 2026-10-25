@@ -15,11 +15,12 @@ patient data.
 
 | Area | Status |
 |---|---|
-| Rate limiting on authentication and email endpoints | ✅ implemented and tested (H2, in-process) |
-| Session controls (sign-out, idle and absolute lifetime, sign-out on account changes) | ✅ implemented and tested (H2) |
+| Rate limiting on authentication and email endpoints | ✅ shared PostgreSQL counters; H2 fallback and PostgreSQL integration-tested |
+| Session controls (sign-out, idle and absolute lifetime, sign-out on account changes) | ✅ JDBC-backed shared sessions and cross-registry invalidation tested |
 | Account-takeover fixes V1, V2 | ✅ fixed, regression tests retained |
 | Dependency advisories | ✅ backend 0, web production 0; one development-only advisory deferred |
-| PostgreSQL re-verification | ⛔ **blocked** — credential rotation not confirmed |
+| Isolated PostgreSQL verification | ✅ backend suite passes on local PostgreSQL 14; production database remains untouched |
+| Production database credential and ownership | ⛔ **blocked** — credential rotation and ownership not confirmed |
 | Google OAuth end to end | ⛔ **blocked** — no development OAuth client configured |
 
 ## Launch-blocking issues
@@ -29,7 +30,7 @@ patient data.
 | 1 | Supabase database password exposed and **not rotated** | Owner action required; blocks every PostgreSQL check |
 | 2 | Google sign-in never run end to end | Needs a development OAuth client; keep `GOOGLE_OAUTH_ENABLED=false` in production until it passes |
 | 3 | Ownership of the existing accounts in the Supabase `postgres` database unknown | Owner confirmation required; nothing may write there |
-| 4 | Rate-limit counters are per API process | Fine for one instance; **more than one instance needs shared state** (see "Rate limiting") |
+| 4 | Shared-state rollout | Apply V21 and confirm the production PostgreSQL role owns the application schema before scaling API instances |
 | 5 | `MEDNET_TRUSTED_PROXIES` must name the production reverse proxy | Without it every visitor shares the proxy's allowance (see "Client addresses") |
 
 The earlier blocker "no rate limiting" is closed by this phase.
@@ -45,16 +46,17 @@ Verified controls first; recommendations and blocked items follow in their own t
 | Deny-by-default API access | `SecurityConfig`: only health, auth entry points, `GET /providers`, `GET /providers/*/availability` public; admin paths need `ADMIN`/`SUPER_ADMIN`; all else signed in, plus role/ownership checks in controllers and services | `signedOutCallersGetUnauthorizedFromEveryAccountEndpoint` (31 endpoints) | pass (H2) | — | Ready |
 | Sign-up cannot take over an unverified account (V1) | Password set only on new accounts | `signUpCannotReplaceThePasswordOfAnExistingUnverifiedAccount` | pass (H2) | — | Ready |
 | Google link drops an unconfirmed password (V2) | `GoogleOAuth2UserService` | `googleSignInDropsAPasswordThatWasNeverConfirmedByTheMailboxOwner`, `…KeepsThePasswordOfAVerifiedAccount` | pass (unit) | Live flow not run | Ready in code; live test blocked |
-| Sign-in failure limits | 10 failures per account, 50 per client, per 15 min; refused before the password check | `repeatedFailedSignInsAreLimitedPerAccountUntilTheWindowPasses`, `guessingOneAccountFromManyAddressesIsStillLimited`, `oneAddressIsLimitedAcrossAccountsWhileOtherAddressesAreNot` | pass (H2) | An attacker can hold a known account in a 15-minute cool-down | Ready for one instance |
-| Email-sending limits (sign-up, resend, forgot-password) | 5 per address, 20 per client, per hour, shared across the three | `verificationEmailsAreLimitedAcrossSignUpAndResend`, `passwordResetRequestsAreLimitedAlikeForUnknownAndKnownAddresses` | pass (H2) | — | Ready for one instance |
-| Reset-code guessing | 10 code/ticket checks per address per hour (any number of clients) plus 30 per client per 15 min; each code still dies after 5 wrong tries and 10 minutes | `resetCodeGuessingIsLimitedPerAccountAcrossAddresses` | pass (H2) | ≈ 240 guesses/day/account → ≈ 0.02 % daily success | Ready for one instance |
+| Sign-in failure limits | 10 failures per account, 50 per client, per 15 min; atomic shared PostgreSQL windows | `repeatedFailedSignInsAreLimitedPerAccountUntilTheWindowPasses`, `guessingOneAccountFromManyAddressesIsStillLimited`, PostgreSQL store integration test | pass (H2 and PostgreSQL) | An attacker can hold a known account in a 15-minute cool-down | Ready after PostgreSQL migration |
+| Email-sending limits (sign-up, resend, forgot-password) | 5 per address, 20 per client, per hour, shared across endpoints and instances | `verificationEmailsAreLimitedAcrossSignUpAndResend`, `passwordResetRequestsAreLimitedAlikeForKnownAndUnknownAddresses` | pass (H2 and PostgreSQL-backed workflow suite) | — | Ready after PostgreSQL migration |
+| Reset-code guessing | 10 code/ticket checks per address per hour (any number of clients) plus 30 per client per 15 min; each code still dies after 5 wrong tries and 10 minutes | `resetCodeGuessingIsLimitedPerAccountAcrossAddresses` | pass (H2 and PostgreSQL-backed workflow suite) | ≈ 240 guesses/day/account → ≈ 0.02 % daily success | Ready after PostgreSQL migration |
 | Verification-link checks | 30 per client per 15 min (tokens are 256-bit) | `verificationLinkChecksAreLimitedPerClient` | pass (H2) | — | Ready |
 | Forged forwarding headers | Client = TCP peer; `X-Forwarded-For` read only from `MEDNET_TRUSTED_PROXIES`, right to left | `forwardingHeadersFromUntrustedClientsCannotEscapeTheLimit`, `aTrustedProxyForwardsEachClientsOwnAllowance`, `forwardingHeadersCountOnlyFromTrustedProxies` | pass | Needs correct proxy list in production | Ready once configured |
 | Non-enumerating responses | Same 202 message for known/unknown addresses; limits count before the account lookup; one generic `429` message | abuse tests above | pass (H2) | — | Ready |
-| Bounded limiter memory | LRU map, `maxTrackedKeys` 50 000; account keys are truncated SHA-256 of the address | `trackedCountersStayWithinTheConfiguredBound`, `accountKeysAreNormalizedAndDoNotContainTheAddress` | pass (unit) | Flooding with many addresses can evict counters early | Ready |
+| Rate-limit key privacy and cleanup | SHA-256 keys in PostgreSQL; expired rows purged periodically. No-PostgreSQL mode uses a bounded LRU map (`maxTrackedKeys`, default 50 000) | `accountKeysAreNormalizedAndDoNotContainTheAddress`, `trackedCountersStayWithinTheConfiguredBound`, PostgreSQL store integration test | pass (unit and PostgreSQL) | H2/local fallback is process-local by design | PostgreSQL mode supports multiple instances |
 | Sign-out | `POST /auth/logout` with CSRF invalidates the session | `signOutEndsTheSession` | pass (H2) | — | Ready |
 | Absolute session lifetime | 12 h from sign-in (`SESSION_ABSOLUTE_TIMEOUT`), idle 30 min (`SESSION_IDLE_TIMEOUT`) | `sessionsEndAfterTheAbsoluteLifetimeEvenWhenActive` | pass (H2) | — | Ready |
-| Sessions end on account changes | Password reset; admin password, email or role change; suspension; verification withdrawn; deletion | `completingAPasswordResetSignsOutExistingSessions`, `suspensionAndRoleChangesSignOutExistingSessions` (both fail with the fix removed) | pass (H2) | Per-process registry (as for limits) | Ready for one instance |
+| Sessions end on account changes | Password reset; admin password, email or role change; suspension; verification withdrawn; deletion; normalized email principal index works for password and Google sign-in | `completingAPasswordResetSignsOutExistingSessions`, `suspensionAndRoleChangesSignOutExistingSessions`, PostgreSQL cross-registry integration test | pass (H2 and PostgreSQL) | Existing in-memory sessions are not migrated; users must sign in again on rollout | Ready after PostgreSQL migration |
+| Shared state across API instances | JDBC sessions and atomic PostgreSQL rate-limit counters | `accountSessionInvalidationIsVisibleAcrossRegistryInstances`, `rateLimitCountersAreSharedAcrossStoreInstances` | pass (PostgreSQL 14) | Production migration/role privileges still need owner confirmation | Ready after deployment configuration |
 | Real-API browser flows with all of the above | auth, admin, find-care, patient, provider, laboratory live specs | Playwright against an H2 API | 174/174 (H2), no limit tripped | Not yet on PostgreSQL | Pending PostgreSQL re-run |
 | Backend dependencies | Spring Boot 4.1.1 + Tomcat 11.0.26, Jackson 3.1.7/2.21.7 overrides | OSV scan, 154 artifacts | 0 advisories | — | Ready |
 | Web production dependencies | — | `npm audit --omit=dev` | 0 | — | Ready |
@@ -252,3 +254,21 @@ No backend or security-configuration change was made in Phase 5E. Verification, 
 
 Launch blockers 1–5 above are unchanged. The production CSP still omits `script-src`/`connect-src`, and HSTS is
 expected from the reverse proxy; both remain deployment decisions (`FINAL_FRONTEND_QA.md` §11).
+
+## Phase 5F shared PostgreSQL state (2026-10-26)
+
+V21 creates JDBC session tables and shared authentication rate-limit windows. PostgreSQL deployments use
+database-backed state; H2 and no-database development modes retain bounded in-memory rate-limit counters,
+and contexts without a session repository retain the in-memory session registry. Account invalidation
+queries by normalized email in the shared registry, including Google OAuth principals. Existing in-process
+sessions cannot be migrated and require users to authenticate again during rollout.
+
+The isolated local PostgreSQL 14 run passed `mvn -Ppostgres-it verify`: 88 unit/API tests, 4 PostgreSQL
+integration tests, and 40 PostgreSQL workflow tests. This included migration validation, account persistence,
+cross-registry session invalidation and shared counter updates. A PostgreSQL-specific read-only locking issue
+and a database-dependent review-queue timestamp projection were fixed and covered by the workflow run.
+
+This verification did not connect to or reset the project's existing/production database. The exposed
+credential rotation and database ownership remain owner actions; Google OAuth still needs a live test client,
+production trusted-proxy CIDRs still need confirmation, and the GitHub Actions run remains blocked by the
+account billing restriction.

@@ -32,6 +32,9 @@ public interface AppointmentRepository extends JpaRepository<AppointmentEntity, 
     Optional<AppointmentEntity> findFirstByPatientAccountIdAndProviderApplicationIdAndStatusInOrderByCreatedAtDesc(
             String patientAccountId, String providerApplicationId, Collection<String> statuses);
 
+    boolean existsByPatientAccountIdAndProviderApplicationIdAndStatusIn(
+            String patientAccountId, String providerApplicationId, Collection<String> statuses);
+
     boolean existsByPatientAccountId(String patientAccountId);
 
     boolean existsByProviderApplicationId(String providerApplicationId);

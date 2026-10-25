@@ -52,6 +52,24 @@ class GoogleOAuth2UserServiceTests {
     }
 
     @Test
+    void normalizesGooglePrincipalNameForSharedSessionInvalidation() {
+        PlatformAccountRepository accounts = mock(PlatformAccountRepository.class);
+        ProviderApplicationRepository providers = mock(ProviderApplicationRepository.class);
+        PlatformAccountEntity account = new PlatformAccountEntity("account-id", "patient@example.test", "PATIENT");
+        account.setEmailVerified(true);
+        when(accounts.findFirstByGoogleSubject("google-subject")).thenReturn(Optional.empty());
+        when(accounts.findFirstByEmailIgnoreCase("patient@example.test")).thenReturn(Optional.of(account));
+        when(accounts.saveAndFlush(account)).thenReturn(account);
+        when(providers.findFirstByEmailIgnoreCaseAndStatusOrderByReviewedAtDesc(
+                "patient@example.test", "APPROVED")).thenReturn(Optional.empty());
+
+        OidcUser linked = service(accounts, providers).applyMedNetRole(googleUser(
+                "Patient@Example.TEST", "google-subject", true));
+
+        assertThat(linked.getName()).isEqualTo("patient@example.test");
+    }
+
+    @Test
     void verifiedGoogleEmailConfirmsPendingAccountAndRemovesUnconfirmedPassword() {
         PlatformAccountRepository accounts = mock(PlatformAccountRepository.class);
         ProviderApplicationRepository providers = mock(ProviderApplicationRepository.class);

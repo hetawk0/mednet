@@ -76,10 +76,11 @@ public class PatientCareAccess {
     }
 
     public void requireCareRelationship(String patientAccountId, String providerId) {
-        appointments.findFirstByPatientAccountIdAndProviderApplicationIdAndStatusInOrderByCreatedAtDesc(
-                        patientAccountId, providerId, CARE_STATUSES)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.FORBIDDEN, "A confirmed care relationship is required"));
+        if (!appointments.existsByPatientAccountIdAndProviderApplicationIdAndStatusIn(
+                patientAccountId, providerId, CARE_STATUSES)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "A confirmed care relationship is required");
+        }
     }
 
     public void requireRecordConsent(String patientAccountId, String providerId) {

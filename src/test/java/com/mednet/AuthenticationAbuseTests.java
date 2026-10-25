@@ -19,13 +19,15 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.session.security.SpringSessionBackedSessionRegistry;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import jakarta.servlet.http.Cookie;
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.auth.email.EkdSendEmailService;
@@ -77,6 +79,9 @@ class AuthenticationAbuseTests {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private SessionRegistry sessionRegistry;
 
     @Autowired
     private MutableClock clock;
@@ -237,32 +242,37 @@ class AuthenticationAbuseTests {
     @Test
     void signOutEndsTheSession() throws Exception {
         String email = verifiedAccount("PATIENT");
-        MockHttpSession session = signedIn(email, "198.51.107.1");
-        mockMvc.perform(get("/api/v1/auth/session").session(session)).andExpect(status().isOk());
+        Cookie session = signedIn(email, "198.51.107.1");
+        mockMvc.perform(get("/api/v1/auth/session").cookie(session)).andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/v1/auth/logout").session(session).with(csrf()))
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(session).with(csrf()))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/v1/auth/session").session(session)).andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/v1/patients/me/profile").session(session)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/session").cookie(session)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/patients/me/profile").cookie(session)).andExpect(status().isUnauthorized());
     }
 
     @Test
     void sessionsEndAfterTheAbsoluteLifetimeEvenWhenActive() throws Exception {
         String email = verifiedAccount("PATIENT");
-        MockHttpSession session = signedIn(email, "198.51.108.1");
+        Cookie session = signedIn(email, "198.51.108.1");
         clock.advance(Duration.ofHours(11));
-        mockMvc.perform(get("/api/v1/auth/session").session(session)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/auth/session").cookie(session)).andExpect(status().isOk());
 
         clock.advance(Duration.ofHours(1).plusSeconds(1));
-        mockMvc.perform(get("/api/v1/auth/session").session(session)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/session").cookie(session)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void jdbcSessionRepositoryUsesTheSharedSessionRegistry() {
+        assertThat(sessionRegistry).isInstanceOf(SpringSessionBackedSessionRegistry.class);
     }
 
     @Test
     void completingAPasswordResetSignsOutExistingSessions() throws Exception {
         when(emailService.send(anyString(), anyString(), anyString(), anyString())).thenReturn(true);
         String email = verifiedAccount("PATIENT");
-        MockHttpSession session = signedIn(email, "198.51.109.1");
+        Cookie session = signedIn(email, "198.51.109.1");
 
         forgotPassword(email, "198.51.109.2").andExpect(status().isAccepted());
         ArgumentCaptor<String> text = ArgumentCaptor.forClass(String.class);
@@ -277,16 +287,16 @@ class AuthenticationAbuseTests {
                 Map.of("email", email, "token", ticket, "password", "Brand-New-Password-2026"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/v1/auth/session").session(session)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/session").cookie(session)).andExpect(status().isUnauthorized());
         signIn(email, "Brand-New-Password-2026", "198.51.109.3").andExpect(status().isNoContent());
     }
 
     @Test
     void suspensionAndRoleChangesSignOutExistingSessions() throws Exception {
         String suspended = verifiedAccount("PATIENT");
-        MockHttpSession suspendedSession = signedIn(suspended, "198.51.110.1");
+        Cookie suspendedSession = signedIn(suspended, "198.51.110.1");
         String regraded = verifiedAccount("LABORATORY");
-        MockHttpSession regradedSession = signedIn(regraded, "198.51.110.2");
+        Cookie regradedSession = signedIn(regraded, "198.51.110.2");
 
         mockMvc.perform(patch("/api/v1/admin/accounts/{id}/status", idOf(suspended))
                 .with(user(SUPER_ADMIN).roles("SUPER_ADMIN"))
@@ -301,9 +311,9 @@ class AuthenticationAbuseTests {
                 .content("{\"accountType\":\"HOME_CARE\"}"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/v1/auth/session").session(suspendedSession))
+        mockMvc.perform(get("/api/v1/auth/session").cookie(suspendedSession))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/v1/partner/lab-results").session(regradedSession))
+        mockMvc.perform(get("/api/v1/partner/lab-results").cookie(regradedSession))
                 .andExpect(status().isUnauthorized());
         signIn(suspended, PASSWORD, "198.51.110.3").andExpect(status().isUnauthorized());
     }
@@ -321,10 +331,12 @@ class AuthenticationAbuseTests {
         return accounts.findFirstByEmailIgnoreCase(email).orElseThrow().getId();
     }
 
-    private MockHttpSession signedIn(String email, String client) throws Exception {
-        return (MockHttpSession) signIn(email, PASSWORD, client)
+    private Cookie signedIn(String email, String client) throws Exception {
+        Cookie session = signIn(email, PASSWORD, client)
                 .andExpect(status().isNoContent())
-                .andReturn().getRequest().getSession(false);
+                .andReturn().getResponse().getCookie("SESSION");
+        assertThat(session).isNotNull();
+        return session;
     }
 
     private org.springframework.test.web.servlet.ResultActions signIn(String email, String password, String client)

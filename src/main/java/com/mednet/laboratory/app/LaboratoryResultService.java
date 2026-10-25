@@ -149,7 +149,9 @@ public class LaboratoryResultService {
                 names.get(row.getPatientAccountId()),
                 Boolean.TRUE.equals(row.getRecordAccess()),
                 row.getPendingResults(),
-                row.getOldestPendingAt() == null ? null : row.getOldestPendingAt().toInstant()));
+                row.getOldestPendingAtEpochMillis() == null
+                        ? null
+                        : Instant.ofEpochMilli(row.getOldestPendingAtEpochMillis())));
         audit(providerEmail, "laboratory_result.review_queue_accessed", provider.getId());
         long totalPending = results.countPendingForProvider(
                 provider.getId(), PatientCareAccess.CARE_STATUSES);

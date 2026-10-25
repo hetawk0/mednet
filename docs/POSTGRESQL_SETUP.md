@@ -67,6 +67,12 @@ psql -h localhost -U mednet_test -d mednet_test -c "select current_user, current
 
 Because PostgreSQL 15+ owns the `public` schema through `pg_database_owner`, each owner role can create
 the Flyway tables in its own database without further grants.
+On PostgreSQL 14 and earlier, explicitly assign the test database's `public` schema to its test role
+before running the profile (the GitHub Actions job does this explicitly):
+
+```sql
+ALTER SCHEMA public OWNER TO mednet_test;
+```
 
 ## Credential rotation (open since 2026-10-11)
 
@@ -148,17 +154,19 @@ SERVER_PORT=8081 SESSION_COOKIE_SECURE=false JAVA_TOOL_OPTIONS=-Xmx768m mvn spri
 Environment variables override the values imported from `.env`, so the development database is not
 touched.
 
-## Compatibility review (static, Phase 5A)
+## Compatibility review (updated 2026-10-26)
 
-- All repository queries are JPQL; there is no native SQL. Search uses `LOWER(...) LIKE LOWER(CONCAT(...))`,
-  which is portable.
+- Most repository queries use JPQL; the laboratory review queue uses a native aggregate query and the
+  PostgreSQL rate-limit store uses atomic `INSERT ... ON CONFLICT ... RETURNING`. The review queue
+  projects its oldest timestamp as epoch milliseconds for stable PostgreSQL/H2 conversion.
 - Migrations use portable types: `VARCHAR`, `BOOLEAN`, `INTEGER`, `NUMERIC(12,3)`, `DATE`, `TIME`,
   `TIMESTAMP WITH TIME ZONE` (mapped from `Instant`, microsecond precision in both databases). V14 uses
-  PostgreSQL `UPDATE … FROM`, which H2's PostgreSQL mode also accepts.
+  PostgreSQL `UPDATE … FROM`, which H2's PostgreSQL mode also accepts. V21 adds JDBC sessions and shared
+  rate-limit windows.
 - Statuses and roles are `VARCHAR` with `CHECK` constraints, not database enum types, so enum handling
   is identical.
 - Identifiers are application-generated UUID strings; there are no sequences or identity columns.
 - V3, V8 and V9 drop PostgreSQL's generated check-constraint names and H2's (`CONSTRAINT_9186`,
   `CONSTRAINT_F6D704`) with `IF EXISTS`, so both databases end with one named constraint.
-- Not yet observed on PostgreSQL: ordering ties on equal `created_at`, transaction isolation under
-  concurrent updates, and the 40-character `admin_audit_events.action` limit (enforced the same way in H2).
+- The full backend and workflow profile passes against isolated PostgreSQL 14. Ordering ties on equal
+  `created_at` and transaction isolation under concurrent workflow updates still need dedicated tests.
