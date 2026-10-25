@@ -63,6 +63,7 @@ import com.mednet.medication.data.MedicationScheduleRepository;
 import com.mednet.medication.data.MedicationDoseLogEntity;
 import com.mednet.medication.data.MedicationDoseLogRepository;
 import com.mednet.notification.app.NotificationService;
+import com.mednet.notification.data.NotificationEmailOutboxRepository;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -84,6 +85,8 @@ import static org.mockito.Mockito.doAnswer;
         "server.servlet.session.cookie.secure=false",
         "spring.datasource.url=jdbc:h2:mem:mednet;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa",
+        "mednet.notifications.email.initial-delay=PT1H",
+        "mednet.notifications.email.dispatch-interval=PT1H",
         "GOOGLE_CLIENT_ID=test-google-client-id",
         "GOOGLE_CLIENT_SECRET=test-google-client-secret",
         "GOOGLE_REDIRECT_URI=https://mednet.example.test/login/oauth2/code/google",
@@ -127,6 +130,9 @@ class MedNetApplicationTests {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private NotificationEmailOutboxRepository notificationEmailOutbox;
 
     @Autowired
     private PatientProfileRepository patientProfiles;
@@ -2035,6 +2041,62 @@ class MedNetApplicationTests {
                 .andExpect(status().isBadRequest());
         mockMvc.perform(get("/api/v1/providers/{id}/availability", provider.getId()).param("size", "101"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void emailNotificationsRespectPreferencesAndQueueOnlyForVerifiedActiveAccounts() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        PlatformAccountEntity patient = verifiedAccount("email-pref-" + suffix + "@mednet.test", "PATIENT");
+
+        mockMvc.perform(get("/api/v1/notifications/preferences")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailEnabled").value(true))
+                .andExpect(jsonPath("$.emailVerified").value(true));
+
+        mockMvc.perform(patch("/api/v1/notifications/preferences")
+                        .with(user(patient.getEmail()).roles("PATIENT"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emailEnabled\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailEnabled").value(false));
+        notificationService.create(
+                patient.getId(), "email-pref:" + suffix + ":disabled", "MESSAGE",
+                "Email preference test disabled " + suffix, "conversation", UUID.randomUUID().toString());
+        var disabledNotification = notificationService.list(patient.getEmail(), 0, 25).getContent().stream()
+                .filter(item -> item.title().equals("Email preference test disabled " + suffix))
+                .findFirst()
+                .orElseThrow();
+        assertThat(notificationEmailOutbox.findByNotificationId(disabledNotification.id())).isEmpty();
+
+        mockMvc.perform(patch("/api/v1/notifications/preferences")
+                        .with(user(patient.getEmail()).roles("PATIENT"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emailEnabled\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailEnabled").value(true));
+        notificationService.create(
+                patient.getId(), "email-pref:" + suffix + ":enabled", "MESSAGE",
+                "Email preference test enabled " + suffix, "conversation", UUID.randomUUID().toString());
+        var enabledNotification = notificationService.list(patient.getEmail(), 0, 25).getContent().stream()
+                .filter(item -> item.title().equals("Email preference test enabled " + suffix))
+                .findFirst()
+                .orElseThrow();
+        assertThat(notificationEmailOutbox.findByNotificationId(enabledNotification.id()).orElseThrow().getStatus())
+                .isEqualTo("PENDING");
+
+        PlatformAccountEntity unverified = accounts.saveAndFlush(new PlatformAccountEntity(
+                UUID.randomUUID().toString(), "unverified-" + suffix + "@mednet.test", "PATIENT"));
+        notificationService.create(
+                unverified.getId(), "email-pref:" + suffix + ":unverified", "APPOINTMENT",
+                "Unverified email preference test " + suffix, "appointment", UUID.randomUUID().toString());
+        var unverifiedNotification = notificationService.list(unverified.getEmail(), 0, 25).getContent().stream()
+                .filter(item -> item.title().equals("Unverified email preference test " + suffix))
+                .findFirst()
+                .orElseThrow();
+        assertThat(notificationEmailOutbox.findByNotificationId(unverifiedNotification.id())).isEmpty();
     }
 
     @Test

@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StateMessage } from "@/components/ui/state-message";
 import { formatDate } from "@/features/patient/format";
 import { actionError } from "@/features/workspace/use-resource";
+import { NotificationPreferencesPanel } from "@/features/workspace/notification-preferences";
 import { PROVIDER_LIMITS, providerApi, type ProviderApplication } from "./provider-api";
 import { useProvider } from "./provider-workspace";
 
@@ -188,6 +189,7 @@ export function ProviderProfile() {
             : "Patients cannot find you until your application is approved."}
         </p>
       </Card>
+      <NotificationPreferencesPanel />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { FictionalDataBadge } from "@/components/ui/fictional-data-badge";
 import { ActivityList, ActivityRow, DescriptionList } from "@/components/ui/lists";
 import { Tabs } from "@/components/ui/tabs";
+import { NotificationPreferencesPanel } from "@/features/workspace/notification-preferences";
 import { fictional } from "@/lib/fictional";
 import { ACCOUNT_TYPES } from "./admin-api";
 import { AccountsPanel } from "./accounts";
@@ -76,7 +77,10 @@ export function SecurityView() {
         description="The administrative audit trail and how access is controlled."
       />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <AuditTrail />
+        <div className="grid gap-6">
+          <AuditTrail />
+          <NotificationPreferencesPanel />
+        </div>
         <Card>
           <CardHeader eyebrow="Access model" title="How MedNet checks access" titleAs="h3" />
           <DescriptionList

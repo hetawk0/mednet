@@ -138,6 +138,15 @@ schemas, status codes, and parameters. The current guarded MVP includes:
 - Participant-only text conversations associated with confirmed appointments. Providers can record one text consultation outcome with `PUT /api/v1/consultations/{id}/outcome` after ending the session; the backend appends an `ENCOUNTER_SUMMARY` only when the existing patient consent and care-relationship checks pass. The end-session endpoint remains backward compatible.
 - Patient home-care and laboratory requests, assigned partner work queues, and laboratory result review/release.
 - Administrator dashboard, provider review, account provisioning, and operational workflows.
+- Notification preferences are available to signed-in users at `GET /api/v1/notifications/preferences`
+  and can be changed with `PATCH /api/v1/notifications/preferences` using
+  `{"emailEnabled":true|false}`. Email notifications are queued transactionally with the in-app
+  notification, sent only to active accounts with verified email addresses and email enabled, and
+  retried from a persisted outbox with bounded exponential backoff. Appointment emails contain only
+  the current appointment status and scheduled time; other notification emails are generic and do
+  not include message previews, laboratory result text, medication details, or clinical content.
+  Users can update this preference in their account profile. Delivery uses the existing EKDSend
+  configuration; email can be disabled globally with `MEDNET_EMAIL_NOTIFICATIONS_ENABLED=false`.
 
 Provider availability slots expose `consultationMode` as `IN_PERSON` or `TEXT`; omit it only for
 legacy compatibility, where the backend defaults it to `TEXT`. Appointment responses include the
@@ -151,10 +160,10 @@ These fields were added in Phase 4D; they are additive and derived from existing
 ## Important scope boundaries
 
 The backend is a guarded MVP, not a completed clinical/service launch. Video or voice consultations,
-emergency handling, payments, binary file uploads, external service routing, SMS/email/push
-notifications, prescribing, medication interaction checks, and vital thresholds/alerts are not
-implemented. Some current safeguards are conservative engineering defaults that still need sponsor
-and legal confirmation.
+emergency handling, payments, binary file uploads, external service routing, SMS/push notifications,
+prescribing, medication interaction checks, and vital thresholds/alerts are not implemented. Email
+delivery is available for notifications under the privacy boundaries above. Some current safeguards
+are conservative engineering defaults that still need sponsor and legal confirmation.
 
 Before extending those areas, review the blocking and high-priority product decisions in
 [req.md](req.md), especially release scope, provider credential verification, payments,

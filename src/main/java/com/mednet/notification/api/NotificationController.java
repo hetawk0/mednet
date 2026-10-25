@@ -10,9 +10,13 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestBody;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import com.mednet.notification.app.NotificationService;
 import com.mednet.notification.app.NotificationService.NotificationDetails;
+import com.mednet.notification.app.NotificationService.NotificationPreferences;
 
 @RestController
 @RequestMapping("/api/v1/notifications")
@@ -42,5 +46,20 @@ public class NotificationController {
     @PatchMapping("/{id}/read")
     public NotificationDetails markRead(@PathVariable String id, Authentication actor) {
         return service.markRead(actor.getName(), id);
+    }
+
+    @GetMapping("/preferences")
+    public NotificationPreferences preferences(Authentication actor) {
+        return service.preferences(actor.getName());
+    }
+
+    @org.springframework.web.bind.annotation.PatchMapping("/preferences")
+    public NotificationPreferences updatePreferences(
+            @Valid @RequestBody NotificationPreferencesRequest request,
+            Authentication actor) {
+        return service.updateEmailPreference(actor.getName(), request.emailEnabled());
+    }
+
+    public record NotificationPreferencesRequest(@NotNull Boolean emailEnabled) {
     }
 }

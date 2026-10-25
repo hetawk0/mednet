@@ -35,6 +35,9 @@ public class PlatformAccountEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
+    @Column(name = "email_notifications_enabled", nullable = false)
+    private boolean emailNotificationsEnabled = true;
+
     @Column(name = "verification_token_hash", length = 64)
     private String verificationTokenHash;
 
@@ -122,6 +125,10 @@ public class PlatformAccountEntity {
         return emailVerified;
     }
 
+    public boolean isEmailNotificationsEnabled() {
+        return emailNotificationsEnabled;
+    }
+
     public String getVerificationTokenHash() {
         return verificationTokenHash;
     }
@@ -191,6 +198,10 @@ public class PlatformAccountEntity {
             this.emailVerified = false;
             clearVerificationTokens();
         }
+    }
+
+    public void setEmailNotificationsEnabled(boolean enabled) {
+        this.emailNotificationsEnabled = enabled;
     }
 
     public void setPasswordHash(String passwordHash) {

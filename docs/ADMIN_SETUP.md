@@ -21,6 +21,10 @@ For production, set these values in the MedNet environment in LPAD:
 | `EKDSEND_API_URL` | EKDSend API base URL; defaults to `https://es.ekddigital.com/api/v1` |
 | `EKDSEND_API_KEY` | Server-only EKDSend API key used by the MedNet API for authentication mail; store as a secret |
 | `FROM_EMAIL` | Verified sender address; defaults to `support@ekddigital.com` |
+| `MEDNET_EMAIL_NOTIFICATIONS_ENABLED` | Enable email delivery for in-app notification events; defaults to `true` |
+| `MEDNET_EMAIL_DISPATCH_INTERVAL` | Interval for persisted notification-email outbox dispatch; ISO-8601 duration, defaults to `PT15S` |
+| `MEDNET_EMAIL_DISPATCH_INITIAL_DELAY` | Delay before the first notification-email dispatch; defaults to `PT10S` |
+| `MEDNET_WEB_BASE_URL` | MedNet web origin linked from account notification emails; defaults to `http://localhost:3000` |
 
 Do not put production credentials in Git, `.lpad/manifest.json`, or public frontend variables. Use a long, unique password and rotate it by changing the LPAD secret and restarting the API service. The committed `.env.example` contains placeholders only, never usable credentials.
 
@@ -36,7 +40,7 @@ See [Security audit](SECURITY_AUDIT.md). Set `MEDNET_TRUSTED_PROXIES` to the rev
 
 ## Account email delivery
 
-The MedNet API generates its own single-use verification/recovery codes and secure fallback links, then sends them directly through EKDSend. Keep `EKDSEND_API_KEY` server-side in the MedNet API environment, never in the browser or Git.
+The MedNet API generates its own single-use verification/recovery codes and secure fallback links, then sends them directly through EKDSend. It also delivers opted-in account notification emails from a persisted transactional outbox, retrying temporary failures with bounded backoff. Appointment notifications include only appointment status and UTC scheduled time; other notices contain no message previews or clinical details. Only active accounts with verified email addresses receive notifications, and users can disable email in their profile. Keep `EKDSEND_API_KEY` server-side in the MedNet API environment, never in the browser or Git.
 
 Registration and resend use privacy-preserving responses. The six-digit code is the primary verification method; the secure link is an alternative. Password recovery uses a code and a short-lived reset ticket. For delivery failures, inspect EKDSend's recipient/message status and verify that `FROM_EMAIL` is an approved sender. A queued message confirms provider acceptance, not final inbox delivery.
 

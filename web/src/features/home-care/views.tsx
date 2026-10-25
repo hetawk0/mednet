@@ -8,6 +8,7 @@ import { DescriptionList } from "@/components/ui/lists";
 import { MetricCard, MetricGrid } from "@/components/ui/metric-card";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { OperationsPageHeading } from "@/features/workspace/record-layout";
+import { NotificationPreferencesPanel } from "@/features/workspace/notification-preferences";
 import { useHomeCare } from "./home-care-workspace";
 import { VisitQueue } from "./visits";
 import { countHomeCare } from "./status";
@@ -106,6 +107,7 @@ export function HomeCareProfile() {
             &ldquo;Forgot password&rdquo; on the sign-in page; you are signed out everywhere when it changes.
           </p>
         </Card>
+        <NotificationPreferencesPanel />
         <Card>
           <CardHeader eyebrow="Permissions" title="What this account can do" titleAs="h3" />
           <ul className="mt-4 flex list-disc flex-col gap-2 pl-5 text-data text-ink-soft">

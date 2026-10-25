@@ -26,14 +26,20 @@ public class NotificationService {
 
     private final PlatformAccountRepository accounts;
     private final NotificationRepository notifications;
+    private final NotificationEmailOutboxOperations emailOutbox;
     private final String configuredAdminEmail;
+    private final boolean emailNotificationsEnabled;
 
     public NotificationService(
             PlatformAccountRepository accounts,
             NotificationRepository notifications,
-            @Value("${mednet.admin.email:}") String configuredAdminEmail) {
+            NotificationEmailOutboxOperations emailOutbox,
+            @Value("${mednet.admin.email:}") String configuredAdminEmail,
+            @Value("${mednet.notifications.email.enabled:true}") boolean emailNotificationsEnabled) {
         this.accounts = accounts;
         this.notifications = notifications;
+        this.emailOutbox = emailOutbox;
+        this.emailNotificationsEnabled = emailNotificationsEnabled;
         this.configuredAdminEmail = configuredAdminEmail == null
                 ? ""
                 : configuredAdminEmail.trim().toLowerCase(java.util.Locale.ROOT);
@@ -53,15 +59,23 @@ public class NotificationService {
             String title,
             String resourceType,
             String resourceId) {
-        if (!notifications.existsByEventKey(eventKey)) {
-            notifications.save(new NotificationEntity(
-                    UUID.randomUUID().toString(),
-                    recipientAccountId,
-                    eventKey,
-                    eventType,
-                    title,
-                    resourceType,
-                    resourceId));
+        if (notifications.existsByEventKey(eventKey)) {
+            return;
+        }
+        NotificationEntity notification = notifications.save(new NotificationEntity(
+                UUID.randomUUID().toString(),
+                recipientAccountId,
+                eventKey,
+                eventType,
+                title,
+                resourceType,
+                resourceId));
+        if (emailNotificationsEnabled) {
+            accounts.findById(recipientAccountId)
+                    .filter(account -> "ACTIVE".equals(account.getStatus())
+                            && account.isEmailVerified()
+                            && account.isEmailNotificationsEnabled())
+                    .ifPresent(account -> emailOutbox.enqueue(notification.getId(), account.getId()));
         }
     }
 
@@ -118,6 +132,19 @@ public class NotificationService {
         return toDetails(notification);
     }
 
+    @Transactional(readOnly = true)
+    public NotificationPreferences preferences(String email) {
+        PlatformAccountEntity account = account(email);
+        return new NotificationPreferences(account.isEmailNotificationsEnabled(), account.isEmailVerified());
+    }
+
+    @Transactional
+    public NotificationPreferences updateEmailPreference(String email, boolean enabled) {
+        PlatformAccountEntity account = account(email);
+        account.setEmailNotificationsEnabled(enabled);
+        return new NotificationPreferences(account.isEmailNotificationsEnabled(), account.isEmailVerified());
+    }
+
     private PlatformAccountEntity account(String email) {
         if (!configuredAdminEmail.isBlank() && configuredAdminEmail.equalsIgnoreCase(email)) {
             return ensureConfiguredAdministratorAccount();
@@ -164,5 +191,8 @@ public class NotificationService {
             String resourceId,
             java.time.Instant createdAt,
             java.time.Instant readAt) {
+    }
+
+    public record NotificationPreferences(boolean emailEnabled, boolean emailVerified) {
     }
 }

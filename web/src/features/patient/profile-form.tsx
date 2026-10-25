@@ -11,6 +11,7 @@ import { careDay } from "@/features/find-care/format";
 import { LIMITS, patientApi, type PatientProfile } from "./patient-api";
 import { usePatient } from "./patient-workspace";
 import { actionError } from "@/features/workspace/use-resource";
+import { NotificationPreferencesPanel } from "@/features/workspace/notification-preferences";
 
 const empty: PatientProfile = { fullName: "", dateOfBirth: "", phoneNumber: "", address: "" };
 
@@ -144,6 +145,7 @@ function ProfileEditor({ initial, isNew, email }: { initial: PatientProfile; isN
           you choose which doctors can see it.
         </p>
       </Card>
+      <NotificationPreferencesPanel />
     </div>
   );
 }

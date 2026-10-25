@@ -15,6 +15,7 @@ import { StateMessage } from "@/components/ui/state-message";
 import { fictional } from "@/lib/fictional";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { OperationsPageHeading, formatOperationsDateTime } from "@/features/workspace/record-layout";
+import { NotificationPreferencesPanel } from "@/features/workspace/notification-preferences";
 import { useResource } from "@/features/workspace/use-resource";
 import { labApi } from "./lab-api";
 import { useLaboratory } from "./laboratory-workspace";
@@ -205,6 +206,7 @@ export function LaboratoryProfile() {
           />
           <p className="mt-4 text-caption text-text-secondary">Name, email and password changes go through a MedNet administrator.</p>
         </Card>
+        <NotificationPreferencesPanel />
         <Card>
           <CardHeader eyebrow="Permissions" title="What this account can do" titleAs="h3" />
           <ul className="mt-4 flex list-disc flex-col gap-2 pl-5 text-data text-ink-soft">
