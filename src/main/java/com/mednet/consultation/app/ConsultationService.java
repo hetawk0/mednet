@@ -26,6 +26,8 @@ import com.mednet.consultation.data.ConsultationRepository;
 import com.mednet.notification.app.NotificationService;
 import com.mednet.patient.app.PatientCareAccess;
 import com.mednet.provider.data.ProviderApplicationEntity;
+import com.mednet.record.app.PatientRecordService;
+import com.mednet.record.app.PatientRecordService.RecordDetails;
 
 @Service
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url")
@@ -38,6 +40,7 @@ public class ConsultationService {
     private final ConsultationMessageRepository messages;
     private final AdminAuditEventRepository auditEvents;
     private final NotificationService notifications;
+    private final PatientRecordService patientRecords;
 
     public ConsultationService(
             PatientCareAccess careAccess,
@@ -46,7 +49,8 @@ public class ConsultationService {
             ConsultationRepository consultations,
             ConsultationMessageRepository messages,
             AdminAuditEventRepository auditEvents,
-            NotificationService notifications) {
+            NotificationService notifications,
+            PatientRecordService patientRecords) {
         this.careAccess = careAccess;
         this.appointments = appointments;
         this.availabilitySlots = availabilitySlots;
@@ -54,6 +58,7 @@ public class ConsultationService {
         this.messages = messages;
         this.auditEvents = auditEvents;
         this.notifications = notifications;
+        this.patientRecords = patientRecords;
     }
 
     @Transactional
@@ -159,6 +164,33 @@ public class ConsultationService {
         return details(session);
     }
 
+    @Transactional
+    public RecordDetails recordOutcome(String providerEmail, String consultationId, String summary) {
+        ConsultationEntity session = consultations.findByIdForUpdate(consultationId)
+                .orElseThrow(ConsultationService::notFound);
+        AppointmentEntity appointment = appointments.findById(session.getAppointmentId())
+                .orElseThrow(ConsultationService::notFound);
+        participant(appointment, providerEmail, "PROVIDER");
+        if (!"ENDED".equals(session.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "End the consultation before recording its outcome");
+        }
+        if (session.getOutcomeRecordId() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "The consultation outcome has already been recorded");
+        }
+        RecordDetails record = patientRecords.addRecord(
+                providerEmail,
+                appointment.getPatientAccountId(),
+                "ENCOUNTER_SUMMARY",
+                "Text consultation outcome",
+                null,
+                summary,
+                session.getEndedAt(),
+                null);
+        session.recordOutcome(record.id());
+        audit(providerEmail, "consultation.outcome_recorded", record.id());
+        return record;
+    }
+
     private Participant participant(AppointmentEntity appointment, String email, String role) {
         if ("PATIENT".equals(role)) {
             PlatformAccountEntity patient = careAccess.requirePatient(email);
@@ -195,7 +227,8 @@ public class ConsultationService {
                 consultation.getAppointmentId(),
                 consultation.getStatus(),
                 consultation.getOpenedAt(),
-                consultation.getEndedAt());
+                consultation.getEndedAt(),
+                consultation.getOutcomeRecordId() != null);
     }
 
     private static ConsultationMessageDetails messageDetails(ConsultationMessageEntity message) {
@@ -218,7 +251,8 @@ public class ConsultationService {
             String appointmentId,
             String status,
             Instant openedAt,
-            Instant endedAt) {
+            Instant endedAt,
+            boolean outcomeRecorded) {
     }
 
     public record ConsultationMessageDetails(

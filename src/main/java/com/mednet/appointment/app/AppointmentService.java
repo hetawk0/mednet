@@ -232,11 +232,27 @@ public class AppointmentService {
 
         AppointmentEntity saved = appointments.save(appointment);
         audit(actorEmail, "appointment." + normalizedAction.toLowerCase(Locale.ROOT), saved.getId());
-        String recipientAccountId = "PATIENT".equals(role)
-                ? careAccess.requireActiveProviderAccount(provider.getEmail()).getId()
-                : saved.getPatientAccountId();
-        notify(recipientAccountId, saved.getId(), "Your appointment status was updated");
+        if ("CANCEL".equals(normalizedAction)) {
+            PlatformAccountEntity providerAccount = careAccess.requireActiveProviderAccount(provider.getEmail());
+            notifyCancellation(saved.getPatientAccountId(), saved.getId());
+            notifyCancellation(providerAccount.getId(), saved.getId());
+        } else {
+            String recipientAccountId = "PATIENT".equals(role)
+                    ? careAccess.requireActiveProviderAccount(provider.getEmail()).getId()
+                    : saved.getPatientAccountId();
+            notify(recipientAccountId, saved.getId(), "Your appointment status was updated");
+        }
         return details(saved);
+    }
+
+    private void notifyCancellation(String recipientAccountId, String appointmentId) {
+        notifications.create(
+                recipientAccountId,
+                "appointment:" + appointmentId + ":cancelled:" + recipientAccountId,
+                "APPOINTMENT",
+                "An appointment was cancelled",
+                "appointment",
+                appointmentId);
     }
 
     private void notify(String recipientAccountId, String appointmentId, String title) {

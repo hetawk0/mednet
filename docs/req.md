@@ -333,6 +333,8 @@ Each module below states its purpose, the roles involved, the numbered requireme
 | FR-028 | A provider must be able to record the outcome of the consultation to the patient's medical record. | Must     | Derived   |
 | FR-029 | A consultation must only be accessible to the patient and provider concerned.                      | Must     | Derived   |
 
+Guarded-MVP implementation note: after ending a text consultation, its provider can append one encounter summary to the patient record through the API. This uses the existing active-care-relationship and explicit patient-consent checks; it does not enable audiovisual recording or prescribing, and does not resolve the open policy questions below.
+
 #### Rules, Dependencies, and Acceptance
 
 | Business rules      | Only the patient and the provider named on the appointment may join that consultation. Every completed consultation should leave a record in the patient's medical history.                                                                                                                                                                                                                                                                                                   |

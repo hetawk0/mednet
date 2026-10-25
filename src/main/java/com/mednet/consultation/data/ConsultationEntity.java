@@ -28,6 +28,9 @@ public class ConsultationEntity {
     @Column(name = "ended_at")
     private Instant endedAt;
 
+    @Column(name = "outcome_record_id", unique = true, length = 36)
+    private String outcomeRecordId;
+
     protected ConsultationEntity() {
     }
 
@@ -48,6 +51,13 @@ public class ConsultationEntity {
         endedAt = Instant.now();
     }
 
+    public void recordOutcome(String recordId) {
+        if (outcomeRecordId != null) {
+            throw new IllegalStateException("Consultation outcome has already been recorded");
+        }
+        outcomeRecordId = recordId;
+    }
+
     public String getId() {
         return id;
     }
@@ -66,5 +76,9 @@ public class ConsultationEntity {
 
     public Instant getEndedAt() {
         return endedAt;
+    }
+
+    public String getOutcomeRecordId() {
+        return outcomeRecordId;
     }
 }

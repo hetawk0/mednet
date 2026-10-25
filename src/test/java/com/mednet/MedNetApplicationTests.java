@@ -579,6 +579,14 @@ class MedNetApplicationTests {
                 .content("{\"action\":\"CANCEL\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+        assertThat(notificationService.list(patientEmail, 0, 100).getContent())
+                .filteredOn(notification -> notification.resourceId().equals(appointmentId))
+                .filteredOn(notification -> notification.title().equals("An appointment was cancelled"))
+                .hasSize(1);
+        assertThat(notificationService.list(providerEmail, 0, 100).getContent())
+                .filteredOn(notification -> notification.resourceId().equals(appointmentId))
+                .filteredOn(notification -> notification.title().equals("An appointment was cancelled"))
+                .hasSize(1);
 
         mockMvc.perform(get("/api/v1/appointments")
                 .with(user(patientEmail).roles("PATIENT")))
@@ -1009,12 +1017,40 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api/v1/patients/{patientId}/vitals", patient.getId())
                 .with(user(providerEmail).roles("PROVIDER")))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/consultations/{id}/outcome", consultationId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"summary\":\"Consultation summary.\"}"))
+                .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/patients/me/record-consents")
                 .with(user(patientEmail).roles("PATIENT"))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"providerId\":\"" + provider.getId() + "\"}"))
                 .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/v1/consultations/{id}/outcome", consultationId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"summary\":\"Consultation summary.\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/consultations/{id}", consultationId)
+                .with(user(providerEmail).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcomeRecorded").value(true));
+        mockMvc.perform(put("/api/v1/consultations/{id}/outcome", consultationId)
+                .with(user(providerEmail).roles("PROVIDER"))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"summary\":\"Duplicate summary.\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(get("/api/v1/patients/me/records")
+                .with(user(patientEmail).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].category").value("ENCOUNTER_SUMMARY"))
+                .andExpect(jsonPath("$.content[0].summary").value("Consultation summary."));
 
         mockMvc.perform(post("/api/v1/patients/me/vitals")
                 .with(user(patientEmail).roles("PATIENT"))
@@ -1032,8 +1068,9 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api/v1/patients/me/records")
                 .with(user(patientEmail).roles("PATIENT")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].category").value("VITAL"))
-                .andExpect(jsonPath("$.content[0].authorName").value("Patient"));
+                .andExpect(jsonPath("$.content[0].category").value("ENCOUNTER_SUMMARY"))
+                .andExpect(jsonPath("$.content[1].category").value("VITAL"))
+                .andExpect(jsonPath("$.content[1].authorName").value("Patient"));
 
         LocalDate startDate = LocalDate.now(ZoneId.of("Africa/Monrovia"));
         MvcResult medicationResult = mockMvc.perform(post("/api/v1/patients/me/medications")
