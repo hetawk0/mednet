@@ -47,13 +47,4 @@ public interface AppointmentRepository extends JpaRepository<AppointmentEntity, 
             """)
     List<AppointmentEntity> findConfirmedAppointmentsStartingBetween(
             @Param("after") Instant after, @Param("before") Instant before);
-
-    /** Patients with an appointment in one of the given statuses with this provider. */
-    @Query("""
-            select distinct appointment.patientAccountId from AppointmentEntity appointment
-            where appointment.providerApplicationId = :providerId
-              and appointment.status in :statuses
-            """)
-    List<String> findPatientIdsByProviderAndStatusIn(
-            @Param("providerId") String providerId, @Param("statuses") Collection<String> statuses);
 }

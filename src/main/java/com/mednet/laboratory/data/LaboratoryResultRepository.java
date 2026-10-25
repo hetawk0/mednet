@@ -1,5 +1,6 @@
 package com.mednet.laboratory.data;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +24,9 @@ public interface LaboratoryResultRepository extends JpaRepository<LaboratoryResu
 
     List<LaboratoryResultEntity> findTop100ByPatientAccountIdAndStatusOrderByCreatedAtAsc(
             String patientAccountId, String status);
+
+    Page<LaboratoryResultEntity> findByPatientAccountIdAndStatusOrderByCreatedAtAscIdAsc(
+            String patientAccountId, String status, Pageable pageable);
 
     Optional<LaboratoryResultEntity> findByIdAndPatientAccountIdAndStatus(
             String id, String patientAccountId, String status);
@@ -49,24 +53,104 @@ public interface LaboratoryResultRepository extends JpaRepository<LaboratoryResu
     Page<LaboratoryResultEntity> findPartnerResults(
             @Param("authorId") String authorId, @Param("status") String status, Pageable pageable);
 
+    @Query(value = """
+            select patient.id as patientAccountId,
+                   case when consent.id is null then false else true end as recordAccess,
+                   count(distinct case when consent.id is not null then result.id end) as pendingResults,
+                   min(case when consent.id is not null then result.created_at end) as oldestPendingAt
+            from platform_accounts patient
+            join appointments appointment
+              on appointment.patient_account_id = patient.id
+             and appointment.provider_application_id = :providerId
+             and appointment.status in (:statuses)
+            left join patient_provider_record_consents consent
+              on consent.patient_account_id = patient.id
+             and consent.provider_application_id = :providerId
+             and consent.status = 'GRANTED'
+            left join laboratory_results result
+              on result.patient_account_id = patient.id
+             and result.status = 'PENDING_REVIEW'
+            where patient.account_type = 'PATIENT'
+            group by patient.id, consent.id
+            having consent.id is null
+                or count(distinct case when consent.id is not null then result.id end) > 0
+            order by case when consent.id is null then 1 else 0 end,
+                     min(case when consent.id is not null then result.created_at end),
+                     patient.id
+            """,
+            countQuery = """
+                    select count(distinct patient.id)
+                    from platform_accounts patient
+                    where patient.account_type = 'PATIENT'
+                      and exists (
+                          select 1 from appointments appointment
+                          where appointment.patient_account_id = patient.id
+                            and appointment.provider_application_id = :providerId
+                            and appointment.status in (:statuses)
+                      )
+                      and (
+                          not exists (
+                              select 1 from patient_provider_record_consents consent
+                              where consent.patient_account_id = patient.id
+                                and consent.provider_application_id = :providerId
+                                and consent.status = 'GRANTED'
+                          )
+                          or exists (
+                              select 1 from laboratory_results result
+                              where result.patient_account_id = patient.id
+                                and result.status = 'PENDING_REVIEW'
+                          )
+                      )
+                    """,
+            nativeQuery = true)
+    Page<ReviewQueueRow> findReviewQueue(
+            @Param("providerId") String providerId,
+            @Param("statuses") List<String> statuses,
+            Pageable pageable);
+
+    @Query("""
+            select count(distinct result.id) from LaboratoryResultEntity result
+            where result.status = 'PENDING_REVIEW'
+              and exists (
+                  select appointment.id from AppointmentEntity appointment
+                  where appointment.patientAccountId = result.patientAccountId
+                    and appointment.providerApplicationId = :providerId
+                    and appointment.status in :statuses
+              )
+              and exists (
+                  select consent.id from PatientProviderRecordConsentEntity consent
+                  where consent.patientAccountId = result.patientAccountId
+                    and consent.providerApplicationId = :providerId
+                    and consent.status = 'GRANTED'
+              )
+            """)
+    long countPendingForProvider(
+            @Param("providerId") String providerId, @Param("statuses") List<String> statuses);
+
     /** Every result on the given requests, newest first (to find each request's latest). */
     List<LaboratoryResultEntity> findByRequestIdInOrderByCreatedAtDesc(java.util.Collection<String> requestIds);
 
-    /** Pending results per patient: count and oldest submission time. */
     @Query("""
-            select result.patientAccountId as patientAccountId, count(result) as pending, min(result.createdAt) as oldest
-            from LaboratoryResultEntity result
-            where result.status = 'PENDING_REVIEW'
-              and result.patientAccountId in :patientIds
-            group by result.patientAccountId
+            select count(distinct appointment.patientAccountId) from AppointmentEntity appointment
+            where appointment.providerApplicationId = :providerId
+              and appointment.status in :statuses
+              and not exists (
+                  select consent.id from PatientProviderRecordConsentEntity consent
+                  where consent.patientAccountId = appointment.patientAccountId
+                    and consent.providerApplicationId = :providerId
+                    and consent.status = 'GRANTED'
+              )
             """)
-    List<PendingByPatient> countPendingByPatient(@Param("patientIds") java.util.Collection<String> patientIds);
+    long countPatientsWithoutRecordAccess(
+            @Param("providerId") String providerId, @Param("statuses") List<String> statuses);
 
-    interface PendingByPatient {
+    interface ReviewQueueRow {
         String getPatientAccountId();
 
-        long getPending();
+        Boolean getRecordAccess();
 
-        java.time.Instant getOldest();
+        long getPendingResults();
+
+        OffsetDateTime getOldestPendingAt();
     }
 }

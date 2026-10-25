@@ -1,9 +1,6 @@
 package com.mednet.laboratory.app;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -13,7 +10,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,7 +20,6 @@ import com.mednet.admin.data.AdminAuditEventEntity;
 import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
-import com.mednet.appointment.data.AppointmentRepository;
 import com.mednet.laboratory.data.LaboratoryResultEntity;
 import com.mednet.laboratory.data.LaboratoryResultRepository;
 import com.mednet.notification.app.NotificationService;
@@ -33,7 +28,6 @@ import com.mednet.patient.data.PatientProfileEntity;
 import com.mednet.patient.data.PatientProfileRepository;
 import com.mednet.record.data.ClinicalRecordEntity;
 import com.mednet.record.data.ClinicalRecordRepository;
-import com.mednet.record.data.PatientProviderRecordConsentRepository;
 import com.mednet.service.data.PatientServiceRequestEntity;
 import com.mednet.service.data.PatientServiceRequestRepository;
 
@@ -48,8 +42,6 @@ public class LaboratoryResultService {
     private final ClinicalRecordRepository records;
     private final AdminAuditEventRepository auditEvents;
     private final NotificationService notifications;
-    private final AppointmentRepository appointments;
-    private final PatientProviderRecordConsentRepository consents;
     private final PatientProfileRepository profiles;
 
     public LaboratoryResultService(
@@ -60,8 +52,6 @@ public class LaboratoryResultService {
             ClinicalRecordRepository records,
             AdminAuditEventRepository auditEvents,
             NotificationService notifications,
-            AppointmentRepository appointments,
-            PatientProviderRecordConsentRepository consents,
             PatientProfileRepository profiles) {
         this.careAccess = careAccess;
         this.accounts = accounts;
@@ -70,8 +60,6 @@ public class LaboratoryResultService {
         this.records = records;
         this.auditEvents = auditEvents;
         this.notifications = notifications;
-        this.appointments = appointments;
-        this.consents = consents;
         this.profiles = profiles;
     }
 
@@ -147,43 +135,27 @@ public class LaboratoryResultService {
     @Transactional
     public ReviewQueuePage reviewQueue(String providerEmail, int page, int size) {
         var provider = careAccess.requireApprovedProviderByEmail(providerEmail);
-        List<String> carePatients = appointments.findPatientIdsByProviderAndStatusIn(
-                provider.getId(), PatientCareAccess.CARE_STATUSES);
-        Set<String> consented = new HashSet<>(consents.findGrantedPatientIds(provider.getId()));
-        List<String> withAccess = carePatients.stream().filter(consented::contains).toList();
-        Map<String, LaboratoryResultRepository.PendingByPatient> pending = withAccess.isEmpty()
-                ? Map.of()
-                : results.countPendingByPatient(withAccess).stream()
-                        .collect(Collectors.toMap(LaboratoryResultRepository.PendingByPatient::getPatientAccountId, row -> row));
-
-        List<ReviewQueueEntry> entries = new ArrayList<>();
-        for (String patientId : carePatients) {
-            if (!consented.contains(patientId)) {
-                entries.add(new ReviewQueueEntry(patientId, null, false, 0, null));
-            } else if (pending.containsKey(patientId)) {
-                var row = pending.get(patientId);
-                entries.add(new ReviewQueueEntry(patientId, null, true, row.getPending(), row.getOldest()));
-            }
-        }
-        // Results to review first, oldest waiting first; then patients without record access.
-        entries.sort(Comparator.comparing(ReviewQueueEntry::recordAccess).reversed()
-                .thenComparing(ReviewQueueEntry::oldestPendingAt, Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(ReviewQueueEntry::patientAccountId));
         PageRequest pageable = pageRequest(page, size);
-        int from = (int) Math.min(pageable.getOffset(), entries.size());
-        int to = Math.min(from + pageable.getPageSize(), entries.size());
-        List<ReviewQueueEntry> slice = entries.subList(from, to);
-        Map<String, String> names = profiles.findByAccountIdIn(slice.stream().map(ReviewQueueEntry::patientAccountId).toList())
+        Page<LaboratoryResultRepository.ReviewQueueRow> rows = results.findReviewQueue(
+                provider.getId(), PatientCareAccess.CARE_STATUSES, pageable);
+        List<String> patientIds = rows.getContent().stream()
+                .map(LaboratoryResultRepository.ReviewQueueRow::getPatientAccountId)
+                .toList();
+        Map<String, String> names = profiles.findByAccountIdIn(patientIds)
                 .stream()
                 .collect(Collectors.toMap(PatientProfileEntity::getAccountId, PatientProfileEntity::getFullName, (a, b) -> a));
-        List<ReviewQueueEntry> named = slice.stream()
-                .map(entry -> new ReviewQueueEntry(entry.patientAccountId(), names.get(entry.patientAccountId()),
-                        entry.recordAccess(), entry.pendingResults(), entry.oldestPendingAt()))
-                .toList();
+        Page<ReviewQueueEntry> named = rows.map(row -> new ReviewQueueEntry(
+                row.getPatientAccountId(),
+                names.get(row.getPatientAccountId()),
+                Boolean.TRUE.equals(row.getRecordAccess()),
+                row.getPendingResults(),
+                row.getOldestPendingAt() == null ? null : row.getOldestPendingAt().toInstant()));
         audit(providerEmail, "laboratory_result.review_queue_accessed", provider.getId());
-        long totalPending = pending.values().stream().mapToLong(LaboratoryResultRepository.PendingByPatient::getPending).sum();
-        long withoutAccess = carePatients.stream().filter(id -> !consented.contains(id)).count();
-        return new ReviewQueuePage(new PageImpl<>(named, pageable, entries.size()), totalPending, withoutAccess);
+        long totalPending = results.countPendingForProvider(
+                provider.getId(), PatientCareAccess.CARE_STATUSES);
+        long withoutAccess = results.countPatientsWithoutRecordAccess(
+                provider.getId(), PatientCareAccess.CARE_STATUSES);
+        return new ReviewQueuePage(named, totalPending, withoutAccess);
     }
 
     @Transactional
@@ -196,6 +168,20 @@ public class LaboratoryResultService {
                 .stream()
                 .map(LaboratoryResultService::details)
                 .toList();
+        audit(providerEmail, "laboratory_result.review_queue_accessed", patient.getId());
+        return pending;
+    }
+
+    @Transactional
+    public Page<LaboratoryResultDetails> pendingForProviderPage(
+            String providerEmail, String patientAccountId, int page, int size) {
+        PlatformAccountEntity patient = careAccess.requirePatientById(patientAccountId);
+        var provider = careAccess.requireApprovedProviderByEmail(providerEmail);
+        careAccess.requireRecordAccess(patient.getId(), provider.getId());
+        Page<LaboratoryResultDetails> pending = results
+                .findByPatientAccountIdAndStatusOrderByCreatedAtAscIdAsc(
+                        patient.getId(), "PENDING_REVIEW", pageRequest(page, size))
+                .map(LaboratoryResultService::details);
         audit(providerEmail, "laboratory_result.review_queue_accessed", patient.getId());
         return pending;
     }

@@ -1902,6 +1902,20 @@ class MedNetApplicationTests {
                 .andExpect(jsonPath("$.content[1].pendingResults").value(0))
                 .andReturn().getResponse().getContentAsString();
         assertThat(body).doesNotContain("Synthetic").doesNotContain(nothingPending.getId()).doesNotContain(otherDoctorsPatient.getId());
+        mockMvc.perform(get("/api/v1/patients/{patientId}/lab-results/pending", consented.getId())
+                        .param("page", "0").param("size", "1")
+                        .with(user(doctor.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content.length()").value(1));
+        mockMvc.perform(get("/api/v1/patients/{patientId}/lab-results/pending", consented.getId())
+                        .with(user(doctor.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+        mockMvc.perform(get("/api/v1/patients/{patientId}/lab-results/pending", notShared.getId())
+                        .param("page", "0")
+                        .with(user(doctor.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isForbidden());
         // Paging keeps the totals.
         mockMvc.perform(get("/api/v1/providers/me/lab-review-queue").param("page", "1").param("size", "1")
                         .with(user(doctor.getEmail()).roles("PROVIDER")))

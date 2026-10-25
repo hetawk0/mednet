@@ -103,6 +103,16 @@ public class LaboratoryResultController {
         return service.pendingForProvider(actor.getName(), patientAccountId);
     }
 
+    @GetMapping(value = "/patients/{patientAccountId}/lab-results/pending", params = "page")
+    @PreAuthorize("hasRole('PROVIDER')")
+    public Page<LaboratoryResultDetails> pendingForProviderPage(
+            @PathVariable @Size(max = 36) String patientAccountId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication actor) {
+        return service.pendingForProviderPage(actor.getName(), patientAccountId, page, size);
+    }
+
     @PatchMapping("/lab-results/{resultId}/review")
     @PreAuthorize("hasRole('PROVIDER')")
     public LaboratoryResultDetails review(
