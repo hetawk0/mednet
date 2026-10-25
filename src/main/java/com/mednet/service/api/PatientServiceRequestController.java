@@ -35,16 +35,21 @@ public class PatientServiceRequestController {
     }
 
     @GetMapping("/home-care-requests")
-    public List<PatientServiceRequestDetails> homeCareRequests(Authentication actor) {
-        return service.listPatient(actor.getName(), "HOME_CARE");
+    public List<PatientServiceRequestDetails> homeCareRequests(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
+            Authentication actor) {
+        return service.listPatient(actor.getName(), "HOME_CARE", status, search);
     }
 
     @GetMapping(value = "/home-care-requests", params = "page")
     public Page<PatientServiceRequestDetails> homeCareRequestsPage(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
             Authentication actor) {
-        return service.pagePatient(actor.getName(), "HOME_CARE", page, size);
+        return service.pagePatient(actor.getName(), "HOME_CARE", status, search, page, size);
     }
 
     @PostMapping("/home-care-requests")
@@ -62,16 +67,21 @@ public class PatientServiceRequestController {
     }
 
     @GetMapping("/lab-requests")
-    public List<PatientServiceRequestDetails> labRequests(Authentication actor) {
-        return service.listPatient(actor.getName(), "LABORATORY");
+    public List<PatientServiceRequestDetails> labRequests(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
+            Authentication actor) {
+        return service.listPatient(actor.getName(), "LABORATORY", status, search);
     }
 
     @GetMapping(value = "/lab-requests", params = "page")
     public Page<PatientServiceRequestDetails> labRequestsPage(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
             Authentication actor) {
-        return service.pagePatient(actor.getName(), "LABORATORY", page, size);
+        return service.pagePatient(actor.getName(), "LABORATORY", status, search, page, size);
     }
 
     @PostMapping("/lab-requests")

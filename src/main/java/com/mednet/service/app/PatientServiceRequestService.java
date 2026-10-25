@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -33,6 +34,10 @@ import com.mednet.service.data.PatientServiceRequestRepository;
 public class PatientServiceRequestService {
 
     private static final Set<String> PATIENT_REQUEST_TYPES = Set.of("HOME_CARE", "LABORATORY");
+    private static final Set<String> SERVICE_REQUEST_STATUSES = Set.of("OPEN", "IN_PROGRESS", "RESOLVED", "CANCELLED");
+    private static final int MAX_SEARCH_LENGTH = 120;
+    private static final Sort REQUEST_ORDER = Sort.by(Sort.Direction.DESC, "createdAt")
+            .and(Sort.by(Sort.Direction.DESC, "id"));
 
     private final PatientCareAccess careAccess;
     private final PlatformAccountRepository accounts;
@@ -92,33 +97,37 @@ public class PatientServiceRequestService {
     }
 
     @Transactional
-    public List<PatientServiceRequestDetails> listPatient(String email, String requestType) {
+    public List<PatientServiceRequestDetails> listPatient(
+            String email, String requestType, String status, String search) {
         PlatformAccountEntity patient = careAccess.requirePatient(email);
         String type = normalizeType(requestType);
+        String normalizedStatus = normalizeStatus(status);
+        String searchPattern = normalizeSearch(search);
         audit(email, "service_request.accessed", patient.getId());
-        return requests.findByPatientAccountIdAndRequestTypeOrderByCreatedAtDesc(patient.getId(), type).stream()
+        List<PatientServiceRequestEntity> history = normalizedStatus == null && searchPattern == null
+                ? requests.findByPatientAccountIdAndRequestTypeOrderByCreatedAtDescIdDesc(patient.getId(), type)
+                : requests.searchPatientHistory(patient.getId(), type, normalizedStatus, searchPattern, REQUEST_ORDER);
+        return history.stream()
                 .map(PatientServiceRequestService::details)
                 .toList();
     }
 
     @Transactional
     public Page<PatientServiceRequestDetails> pagePatient(
-            String email, String requestType, int page, int size) {
+            String email, String requestType, String status, String search, int page, int size) {
         PlatformAccountEntity patient = careAccess.requirePatient(email);
         String type = normalizeType(requestType);
-        if (page < 0 || size < 1 || size > 100) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be 0 or more and size 1 to 100");
-        }
+        validatePage(page, size);
+        String normalizedStatus = normalizeStatus(status);
+        String searchPattern = normalizeSearch(search);
         audit(email, "service_request.accessed", patient.getId());
-        return requests.findByPatientAccountIdAndRequestTypeOrderByCreatedAtDesc(
-                        patient.getId(),
-                        type,
-                        PageRequest.of(
-                                page,
-                                size,
-                                Sort.by(Sort.Direction.DESC, "createdAt")
-                                        .and(Sort.by(Sort.Direction.DESC, "id"))))
-                .map(PatientServiceRequestService::details);
+        PageRequest pageable = PageRequest.of(page, size, REQUEST_ORDER);
+        List<PatientServiceRequestEntity> history = requests.searchPatientHistoryPage(
+                        patient.getId(), type, normalizedStatus, searchPattern,
+                        pageable);
+        long total = requests.countPatientHistory(patient.getId(), type, normalizedStatus, searchPattern);
+        return new PageImpl<>(
+                history.stream().map(PatientServiceRequestService::details).toList(), pageable, total);
     }
 
     @Transactional
@@ -265,11 +274,15 @@ public class PatientServiceRequestService {
     }
 
     @Transactional
-    public List<PartnerRequestDetails> listAssigned(String email, String requestType) {
+    public List<PartnerRequestDetails> listAssigned(
+            String email, String requestType, String status, String search) {
         String type = normalizeType(requestType);
         PlatformAccountEntity staff = requirePartnerAccount(email, type);
-        List<PatientServiceRequestEntity> assigned = requests
-                .findByAssignedStaffAccountIdAndRequestTypeOrderByCreatedAtDesc(staff.getId(), type);
+        String normalizedStatus = normalizeStatus(status);
+        String searchPattern = normalizeSearch(search);
+        List<PatientServiceRequestEntity> assigned = normalizedStatus == null && searchPattern == null
+                ? requests.findByAssignedStaffAccountIdAndRequestTypeOrderByCreatedAtDescIdDesc(staff.getId(), type)
+                : requests.searchAssignedRequests(staff.getId(), type, normalizedStatus, searchPattern, REQUEST_ORDER);
         audit(email, "service_request.partner_queue_accessed", staff.getId());
         // Laboratory orders carry their latest result's review state (one query for the whole list), so the
         // queue does not depend on a separately loaded, page-limited result list (Phase 5D).
@@ -288,31 +301,30 @@ public class PatientServiceRequestService {
 
     @Transactional
     public Page<PartnerRequestDetails> pageAssigned(
-            String email, String requestType, int page, int size) {
+            String email, String requestType, String status, String search, int page, int size) {
         String type = normalizeType(requestType);
         PlatformAccountEntity staff = requirePartnerAccount(email, type);
-        if (page < 0 || size < 1 || size > 100) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be 0 or more and size 1 to 100");
-        }
+        validatePage(page, size);
+        String normalizedStatus = normalizeStatus(status);
+        String searchPattern = normalizeSearch(search);
         audit(email, "service_request.partner_queue_accessed", staff.getId());
-        Page<PatientServiceRequestEntity> assigned = requests
-                .findByAssignedStaffAccountIdAndRequestTypeOrderByCreatedAtDesc(
-                        staff.getId(),
-                        type,
-                        PageRequest.of(
-                                page,
-                                size,
-                                Sort.by(Sort.Direction.DESC, "createdAt")
-                                        .and(Sort.by(Sort.Direction.DESC, "id"))));
+        PageRequest pageable = PageRequest.of(page, size, REQUEST_ORDER);
+        List<PatientServiceRequestEntity> assigned = requests.searchAssignedRequestsPage(
+                staff.getId(), type, normalizedStatus, searchPattern,
+                pageable);
+        long total = requests.countAssignedRequests(staff.getId(), type, normalizedStatus, searchPattern);
         Map<String, LatestResult> latest = new java.util.HashMap<>();
         if ("LABORATORY".equals(type) && !assigned.isEmpty()) {
             for (var result : labResults.findByRequestIdInOrderByCreatedAtDesc(
-                    assigned.getContent().stream().map(PatientServiceRequestEntity::getId).toList())) {
+                    assigned.stream().map(PatientServiceRequestEntity::getId).toList())) {
                 latest.putIfAbsent(result.getRequestId(), new LatestResult(
                         result.getId(), result.getStatus(), result.getCreatedAt(), result.getReviewedAt()));
             }
         }
-        return assigned.map(request -> partnerDetails(request, latest.get(request.getId())));
+        return new PageImpl<>(
+                assigned.stream().map(request -> partnerDetails(request, latest.get(request.getId()))).toList(),
+                pageable,
+                total);
     }
 
     @Transactional
@@ -365,6 +377,38 @@ public class PatientServiceRequestService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported service request type");
         }
         return normalized;
+    }
+
+    private static String normalizeStatus(String status) {
+        if (status == null) {
+            return null;
+        }
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
+        if (!SERVICE_REQUEST_STATUSES.contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported service request status");
+        }
+        return normalized;
+    }
+
+    private static String normalizeSearch(String search) {
+        if (search == null) {
+            return null;
+        }
+        if (search.length() > MAX_SEARCH_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search must be 120 characters or fewer");
+        }
+        String normalized = search.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        String escaped = normalized.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+        return "%" + escaped + "%";
+    }
+
+    private static void validatePage(int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be 0 or more and size 1 to 100");
+        }
     }
 
     private void audit(String actorEmail, String action, String requestId) {

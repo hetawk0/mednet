@@ -776,6 +776,104 @@ class MedNetApplicationTests {
     }
 
     @Test
+    void patientHistoriesAndPartnerQueuesFilterBeforePagingAndStayOwnerScoped() throws Exception {
+        String suffix = UUID.randomUUID().toString();
+        PlatformAccountEntity patient = verifiedAccount("filtered-patient-" + suffix + "@mednet.test", "PATIENT");
+        PlatformAccountEntity otherPatient = verifiedAccount("filtered-other-" + suffix + "@mednet.test", "PATIENT");
+        PlatformAccountEntity queuePatient = verifiedAccount("filtered-queue-patient-" + suffix + "@mednet.test", "PATIENT");
+        PlatformAccountEntity staff = verifiedAccount("filtered-staff-" + suffix + "@mednet.test", "HOME_CARE");
+        PlatformAccountEntity otherStaff = verifiedAccount("filtered-other-staff-" + suffix + "@mednet.test", "HOME_CARE");
+        Instant newest = Instant.now().minusSeconds(60);
+
+        saveServiceRequestAt(patient, "HOME_CARE", "Routine visit", "East Ward", "OPEN", null, newest);
+        PatientServiceRequestEntity patientMatchFirst = saveServiceRequestAt(
+                patient, "HOME_CARE", "Nursing visit", "North Harbor", "OPEN", null, newest.minusSeconds(1));
+        PatientServiceRequestEntity patientMatchSecond = saveServiceRequestAt(
+                patient, "HOME_CARE", "Meal support", "North Harbor", "OPEN", null, newest.minusSeconds(2));
+        saveServiceRequestAt(
+                patient, "HOME_CARE", "Nursing visit", "North Harbor", "CANCELLED", null, newest.minusSeconds(3));
+        saveServiceRequestAt(
+                otherPatient, "HOME_CARE", "Nursing visit", "North Harbor", "OPEN", null, newest.minusSeconds(4));
+
+        assertThat(serviceRequests.countPatientHistory(patient.getId(), "HOME_CARE", "OPEN", "%north harbor%"))
+                .isEqualTo(2);
+
+        saveServiceRequestAt(queuePatient, "HOME_CARE", "Routine visit", "East Ward", "OPEN", staff, newest);
+        PatientServiceRequestEntity partnerMatchFirst = saveServiceRequestAt(
+                queuePatient, "HOME_CARE", "Nursing visit", "North Harbor", "OPEN", staff, newest.minusSeconds(1));
+        PatientServiceRequestEntity partnerMatchSecond = saveServiceRequestAt(
+                queuePatient, "HOME_CARE", "Meal support", "North Harbor", "OPEN", staff, newest.minusSeconds(2));
+        saveServiceRequestAt(
+                queuePatient, "HOME_CARE", "Nursing visit", "North Harbor", "CANCELLED", staff, newest.minusSeconds(3));
+        saveServiceRequestAt(
+                otherPatient, "HOME_CARE", "Nursing visit", "North Harbor", "OPEN", otherStaff, newest.minusSeconds(4));
+        saveServiceRequestAt(
+                queuePatient, "LABORATORY", "Nursing visit", "North Harbor", "OPEN", staff, newest.minusSeconds(5));
+
+        String search = "  NORTH HARBOR  ";
+        mockMvc.perform(get("/api/v1/home-care-requests")
+                        .param("page", "0").param("size", "1").param("status", " open ").param("search", search)
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(patientMatchFirst.getId()));
+        mockMvc.perform(get("/api/v1/home-care-requests")
+                        .param("page", "1").param("size", "1").param("status", "OPEN").param("search", search)
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].id").value(patientMatchSecond.getId()));
+        mockMvc.perform(get("/api/v1/home-care-requests")
+                        .param("status", "OPEN").param("search", "north harbor")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(2));
+
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                        .param("type", "HOME_CARE").param("page", "0").param("size", "1")
+                        .param("status", "open").param("search", search)
+                        .with(user(staff.getEmail()).roles("HOME_CARE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(partnerMatchFirst.getId()))
+                .andExpect(jsonPath("$.content[0].patientAccountId").doesNotExist());
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                        .param("type", "HOME_CARE").param("page", "1").param("size", "1")
+                        .param("status", "OPEN").param("search", search)
+                        .with(user(staff.getEmail()).roles("HOME_CARE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].id").value(partnerMatchSecond.getId()));
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                        .param("type", "HOME_CARE").param("status", "OPEN").param("search", "north harbor")
+                        .with(user(staff.getEmail()).roles("HOME_CARE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(2));
+
+        mockMvc.perform(get("/api/v1/home-care-requests")
+                        .param("page", "0").param("status", "WAITING")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/home-care-requests")
+                        .param("page", "0").param("search", "x".repeat(121))
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                        .param("type", "HOME_CARE").param("page", "0").param("status", "WAITING")
+                        .with(user(staff.getEmail()).roles("HOME_CARE")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/partner/service-requests")
+                        .param("type", "HOME_CARE").param("page", "0").param("search", "x".repeat(121))
+                        .with(user(staff.getEmail()).roles("HOME_CARE")))
+                .andExpect(status().isBadRequest());
+
+    }
+
+    @Test
     void conversationAndConsentHistoriesSupportOptionalValidatedPagination() throws Exception {
         PlatformAccountEntity patient = verifiedAccount(
                 "conversation-pagination-" + UUID.randomUUID() + "@mednet.test", "PATIENT");
@@ -2141,6 +2239,32 @@ class MedNetApplicationTests {
         PlatformAccountEntity account = new PlatformAccountEntity(UUID.randomUUID().toString(), email, type);
         account.verifyEmail();
         return accounts.saveAndFlush(account);
+    }
+
+    private PatientServiceRequestEntity saveServiceRequestAt(
+            PlatformAccountEntity patient,
+            String type,
+            String requestedService,
+            String location,
+            String status,
+            PlatformAccountEntity assignedStaff,
+            Instant createdAt) {
+        PatientServiceRequestEntity request = new PatientServiceRequestEntity(
+                UUID.randomUUID().toString(), patient.getId(), type, requestedService, location);
+        if (!"OPEN".equals(status)) {
+            request.changeStatus(status);
+        }
+        if (assignedStaff != null) {
+            request.assignTo(assignedStaff.getId());
+        }
+        serviceRequests.saveAndFlush(request);
+        Timestamp timestamp = Timestamp.from(createdAt);
+        jdbcTemplate.update(
+                "UPDATE patient_service_requests SET created_at = ?, updated_at = ? WHERE id = ?",
+                timestamp,
+                timestamp,
+                request.getId());
+        return request;
     }
 
     private AppointmentEntity confirmedAppointment(

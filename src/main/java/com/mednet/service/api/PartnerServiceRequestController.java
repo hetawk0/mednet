@@ -40,8 +40,10 @@ public class PartnerServiceRequestController {
     @GetMapping
     public List<PartnerRequestDetails> assignedRequests(
             @RequestParam String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
             Authentication actor) {
-        return service.listAssigned(actor.getName(), type);
+        return service.listAssigned(actor.getName(), type, status, search);
     }
 
     @GetMapping(params = "page")
@@ -49,8 +51,10 @@ public class PartnerServiceRequestController {
             @RequestParam String type,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
             Authentication actor) {
-        return service.pageAssigned(actor.getName(), type, page, size);
+        return service.pageAssigned(actor.getName(), type, status, search, page, size);
     }
 
     @PatchMapping("/{id}/schedule")
