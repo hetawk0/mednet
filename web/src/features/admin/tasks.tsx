@@ -13,6 +13,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { LIST_PAGE_SIZE, usePageFor } from "@/features/workspace/paging";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { actionError, useResource } from "@/features/workspace/use-resource";
+import { CsvExportButton } from "./csv-export-button";
+import { exportAllOperationalReferences, exportAllPatientRequests } from "./csv-export";
 import {
   ADMIN_LIMITS,
   OPERATIONAL_REQUEST_TYPES,
@@ -101,6 +103,21 @@ function PatientRequestQueue({ type }: { type: "HOME_CARE" | "LABORATORY" }) {
       <RecordLayout
         list={
           <ListCard eyebrow="Operations queue" title={type === "HOME_CARE" ? "Home-care requests" : "Laboratory requests"}>
+            <div className="flex justify-end">
+              <CsvExportButton
+                filename={type === "HOME_CARE" ? "mednet-home-care-requests" : "mednet-laboratory-requests"}
+                headers={["Request", "Status", "Received", "Assigned to"]}
+                disabled={resource.state !== "ready"}
+                loadRows={async () =>
+                  (await exportAllPatientRequests(type, statuses)).map((request) => [
+                    shortReference(request.id),
+                    request.status,
+                    formatAdminDateTime(request.createdAt),
+                    request.assignedStaffPublicId || "Not assigned",
+                  ])
+                }
+              />
+            </div>
             <SelectField
               label="Request status"
               hideLabel
@@ -342,9 +359,24 @@ function OperationalReferences() {
             eyebrow="Operations queue"
             title="Operational references"
             action={
-              <Button size="sm" variant="secondary" onClick={() => setAdding(true)}>
-                Add reference
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <CsvExportButton
+                  filename="mednet-operational-references"
+                  headers={["Reference", "Type", "Status", "Added"]}
+                  disabled={resource.state !== "ready"}
+                  loadRows={async () =>
+                    (await exportAllOperationalReferences()).map((request) => [
+                      request.referenceId,
+                      REQUEST_TYPE_LABELS[request.requestType] ?? request.requestType,
+                      request.status,
+                      formatAdminDateTime(request.createdAt),
+                    ])
+                  }
+                />
+                <Button size="sm" variant="secondary" onClick={() => setAdding(true)}>
+                  Add reference
+                </Button>
+              </div>
             }
           >
             <p className="text-caption text-text-secondary">

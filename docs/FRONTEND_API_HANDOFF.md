@@ -67,6 +67,19 @@ Phase 5D (performance; additive, backward compatible — every list keeps its ol
   Spring page instead of the first 100 rows. `GET /admin/audit/resource-types` lists record types.
 - `GET /partner/service-requests?type=LABORATORY` rows add `latestResult` (`{id, status, createdAt,
   reviewedAt}` or null; no text).
+
+Admin CSV exports are frontend-only and use the existing paged admin endpoints above; no API route or
+authorization rule was added. Audit export reuses the current search and record-type filters, while
+home-care/laboratory request exports reuse the selected request type and status filter. Appointment
+and operational-reference exports page through their existing lists. Each page request is limited
+to 100 rows, and every matching page is fetched before the download begins. The CSV allowlists only
+fields already shown in the corresponding admin list: audit time/action/actor/short record reference,
+appointment timing/mode/status/short references, request status/date/assigned public ID, or
+operational reference/type/status/date. It excludes clinical text, patient records, lab result
+summaries, medication/vital data, and hidden requester details. Cells are RFC 4180 quoted and
+spreadsheet formula-leading values are neutralized. These list exports do not implement RPT-08
+reporting data or add aggregate metrics.
+
 Phase 5C (home care): no endpoint or contract change. The web client now uses the existing partner
 endpoints for `HOME_CARE` accounts at `/home-care`: `GET /partner/service-requests?type=HOME_CARE`
 (own assignments: `requestedService`, `locationDescription`, `status`, `scheduledAt`, dates; no patient
@@ -101,8 +114,9 @@ schemas, status codes, and parameters. The current guarded MVP includes:
   `summary`, `status` (`PENDING_REVIEW`, `RETURNED`, `RELEASED`), `createdAt`, `reviewedAt`. No patient or reviewer
   identifier. Read-only: review decisions remain with the doctor.
 - Patient profile, consent-gated records, medications, vitals, and notifications.
-- Patient home-care/laboratory request histories, medication schedules, and dose histories accept `page` and optional `size` (default 25, maximum 100) and return a Spring `Page`; omitting `page` preserves the existing list response for compatibility.
-- Assigned partner work queues also accept `page` and `size` (maximum 100); laboratory pages include the latest result status without exposing result text.
+- Patient home-care/laboratory request histories accept `page` and optional `size` (default 25, maximum 100) and return a Spring `Page`; omitting `page` preserves the existing list response. Both forms accept optional `status` (`OPEN`, `IN_PROGRESS`, `RESOLVED`, or `CANCELLED`) and `search`. Search is trimmed, case-insensitive, limited to 120 characters, and matches only the requested service description or location visible to the patient.
+- Assigned partner work queues also accept `page` and `size` (default 25, maximum 100), with optional `status` and `search`; laboratory pages include the latest result status without exposing result text. Results are restricted to the authenticated staff account's assignments of the requested `type` (`HOME_CARE` or `LABORATORY`); search matches only requested service descriptions and locations already visible to that staff role. Omitting `page` preserves the existing list response.
+- For these service-request endpoints, invalid statuses and searches longer than 120 characters return `400`. Medication schedule and dose histories remain paginated as documented below.
 - `GET /api/v1/conversations?page=&size=` and `GET /api/v1/patients/me/record-consents?page=&size=` return paginated histories (default size 25, maximum 100). Omitting `page` preserves the existing list responses; conversation pages include only current eligible care relationships.
 - Provider pending laboratory results for a patient accept optional `page` and `size` (default 25, maximum 100); the existing unpaged response shape remains available. Record-consent and care-relationship checks apply to both forms.
 - Provider applications, approved-provider directory, availability, and appointments.

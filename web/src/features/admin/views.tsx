@@ -156,7 +156,7 @@ export function ReportsPageView() {
     <>
       <AdminPageHeading
         title="Reports"
-        description="Live operational counts and recent administrative activity. Report export is not available."
+        description="Live operational counts and recent administrative activity. Operational CSV exports are available from their list views; aggregate report exports are not available."
       />
       <ReportsView />
     </>

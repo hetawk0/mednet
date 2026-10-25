@@ -15,6 +15,8 @@ import { useDebouncedValue, usePageFor } from "@/features/workspace/paging";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { useResource } from "@/features/workspace/use-resource";
 import { adminApi, type AdminAppointment, type AdminOverview, type AuditEvent } from "./admin-api";
+import { CsvExportButton } from "./csv-export-button";
+import { exportAllAppointments, exportAllAuditEvents } from "./csv-export";
 import { formatAdminDateTime } from "./frame";
 import { MODULE_LABELS, auditActionLabel, auditActionsMatchingLabel, moduleStatus, shortReference } from "./permissions";
 
@@ -44,6 +46,24 @@ export function AdminAppointments() {
         Newest requests first. References are shortened internal identifiers; names, reasons and consultation content are not
         available to administrators. Opening this list is recorded in the audit trail.
       </p>
+      <div className="flex justify-end">
+        <CsvExportButton
+          filename="mednet-appointments"
+          headers={["Reference", "Starts (Liberia time)", "Mode", "Status", "Patient ref.", "Provider ref.", "Requested"]}
+          disabled={resource.state !== "ready"}
+          loadRows={async () =>
+            (await exportAllAppointments()).map((row) => [
+              `APT-${shortReference(row.id)}`,
+              formatAdminDateTime(row.startsAt),
+              consultationModeLabel(row.consultationMode),
+              row.status,
+              shortReference(row.patientAccountId),
+              shortReference(row.providerApplicationId),
+              formatAdminDateTime(row.createdAt),
+            ])
+          }
+        />
+      </div>
       {resource.state === "error" ? (
         <ErrorRow title="Appointments could not be loaded" status={resource.status} onRetry={reload} />
       ) : (
@@ -96,6 +116,25 @@ export function AuditTrail({ title = "Audit trail" }: { title?: string }) {
   return (
     <Card className="flex flex-col gap-5">
       <CardHeader eyebrow="Security" title={title} />
+      <div className="flex justify-end">
+        <CsvExportButton
+          filename="mednet-audit-trail"
+          headers={["When (Liberia time)", "Action", "By", "Record"]}
+          disabled={resource.state !== "ready"}
+          loadRows={async () =>
+            (await exportAllAuditEvents({
+              search,
+              resourceType,
+              labelActions: auditActionsMatchingLabel(search),
+            })).map((event) => [
+              formatAdminDateTime(event.createdAt),
+              auditActionLabel(event.action),
+              event.actorEmail,
+              `${event.resourceType.replaceAll("_", " ")} ${shortReference(event.resourceId)}`,
+            ])
+          }
+        />
+      </div>
       <div role="search" aria-label="Audit filters" className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <SearchInput label="Search the audit trail" placeholder="Action, person or record" value={query} onChange={(event) => setQuery(event.target.value)} />
         <SelectField
@@ -126,7 +165,6 @@ export function AuditTrail({ title = "Audit trail" }: { title?: string }) {
       ) : null}
       <p className="text-caption text-text-secondary">
         The trail is append-only. Records are identified by shortened internal references; no clinical content is stored in it.
-        Export is not available.
       </p>
     </Card>
   );
