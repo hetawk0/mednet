@@ -2,6 +2,7 @@ package com.mednet;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -55,6 +56,8 @@ import com.mednet.appointment.app.AppointmentReminderService;
 import com.mednet.medication.app.MedicationService;
 import com.mednet.medication.data.MedicationScheduleEntity;
 import com.mednet.medication.data.MedicationScheduleRepository;
+import com.mednet.medication.data.MedicationDoseLogEntity;
+import com.mednet.medication.data.MedicationDoseLogRepository;
 import com.mednet.notification.app.NotificationService;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -147,6 +150,9 @@ class MedNetApplicationTests {
 
     @Autowired
     private MedicationScheduleRepository medicationSchedules;
+
+    @Autowired
+    private MedicationDoseLogRepository medicationDoseLogs;
 
     @Autowired
     private MedicationService medicationService;
@@ -642,6 +648,88 @@ class MedNetApplicationTests {
         assertThat(notificationService.list(patient.getEmail(), 0, 100).getContent())
                 .noneMatch(notification -> notification.resourceId().equals(cancelled.getId())
                         || notification.resourceId().equals(pending.getId()));
+    }
+
+    @Test
+    void patientRequestAndMedicationHistoriesSupportOptionalValidatedPagination() throws Exception {
+        PlatformAccountEntity patient = verifiedAccount(
+                "history-pagination-" + UUID.randomUUID() + "@mednet.test", "PATIENT");
+        for (int index = 0; index < 27; index++) {
+            serviceRequests.save(new PatientServiceRequestEntity(
+                    UUID.randomUUID().toString(),
+                    patient.getId(),
+                    "HOME_CARE",
+                    "Request " + index,
+                    "Monrovia"));
+            serviceRequests.save(new PatientServiceRequestEntity(
+                    UUID.randomUUID().toString(),
+                    patient.getId(),
+                    "LABORATORY",
+                    "Test " + index,
+                    null));
+        }
+        MedicationScheduleEntity schedule = medicationSchedules.saveAndFlush(new MedicationScheduleEntity(
+                UUID.randomUUID().toString(),
+                patient.getId(),
+                "Patient-entered medicine",
+                "1 tablet",
+                LocalTime.of(9, 0),
+                "Africa/Monrovia",
+                LocalDate.now().minusDays(30),
+                null,
+                Instant.now().plusSeconds(86_400)));
+        for (int index = 0; index < 27; index++) {
+            medicationDoseLogs.save(new MedicationDoseLogEntity(
+                    UUID.randomUUID().toString(),
+                    schedule.getId(),
+                    LocalDate.now().minusDays(index),
+                    Instant.now().minusSeconds(index * 60L)));
+        }
+        serviceRequests.flush();
+        medicationSchedules.flush();
+        medicationDoseLogs.flush();
+
+        mockMvc.perform(get("/api/v1/home-care-requests").param("page", "0").param("size", "10")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(27))
+                .andExpect(jsonPath("$.totalPages").value(3))
+                .andExpect(jsonPath("$.content.length()").value(10));
+        mockMvc.perform(get("/api/v1/home-care-requests")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(27));
+        mockMvc.perform(get("/api/v1/lab-requests").param("page", "0").param("size", "10")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(27))
+                .andExpect(jsonPath("$.totalPages").value(3))
+                .andExpect(jsonPath("$.content.length()").value(10));
+        mockMvc.perform(get("/api/v1/home-care-requests").param("page", "0").param("size", "101")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/patients/me/medications").param("page", "0").param("size", "10")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content.length()").value(1));
+        mockMvc.perform(get("/api/v1/patients/me/medications/{id}/dose-logs", schedule.getId())
+                        .param("page", "0")
+                        .param("size", "10")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(27))
+                .andExpect(jsonPath("$.totalPages").value(3))
+                .andExpect(jsonPath("$.content.length()").value(10));
+        mockMvc.perform(get("/api/v1/patients/me/medications/{id}/dose-logs", schedule.getId())
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(27));
+        mockMvc.perform(get("/api/v1/patients/me/medications/{id}/dose-logs", schedule.getId())
+                        .param("page", "0")
+                        .param("size", "101")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

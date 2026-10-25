@@ -21,6 +21,9 @@ public interface PatientServiceRequestRepository extends JpaRepository<PatientSe
     List<PatientServiceRequestEntity> findByPatientAccountIdAndRequestTypeOrderByCreatedAtDesc(
             String patientAccountId, String requestType);
 
+    Page<PatientServiceRequestEntity> findByPatientAccountIdAndRequestTypeOrderByCreatedAtDesc(
+            String patientAccountId, String requestType, Pageable pageable);
+
     List<PatientServiceRequestEntity> findTop100ByRequestTypeOrderByCreatedAtDesc(String requestType);
 
     List<PatientServiceRequestEntity> findByAssignedStaffAccountIdAndRequestTypeOrderByCreatedAtDesc(

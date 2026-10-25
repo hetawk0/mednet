@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -98,6 +99,26 @@ public class PatientServiceRequestService {
         return requests.findByPatientAccountIdAndRequestTypeOrderByCreatedAtDesc(patient.getId(), type).stream()
                 .map(PatientServiceRequestService::details)
                 .toList();
+    }
+
+    @Transactional
+    public Page<PatientServiceRequestDetails> pagePatient(
+            String email, String requestType, int page, int size) {
+        PlatformAccountEntity patient = careAccess.requirePatient(email);
+        String type = normalizeType(requestType);
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be 0 or more and size 1 to 100");
+        }
+        audit(email, "service_request.accessed", patient.getId());
+        return requests.findByPatientAccountIdAndRequestTypeOrderByCreatedAtDesc(
+                        patient.getId(),
+                        type,
+                        PageRequest.of(
+                                page,
+                                size,
+                                Sort.by(Sort.Direction.DESC, "createdAt")
+                                        .and(Sort.by(Sort.Direction.DESC, "id"))))
+                .map(PatientServiceRequestService::details);
     }
 
     @Transactional

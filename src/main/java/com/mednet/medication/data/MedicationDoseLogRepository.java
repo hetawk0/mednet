@@ -4,10 +4,14 @@ import java.time.LocalDate;
 import java.util.Optional;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MedicationDoseLogRepository extends JpaRepository<MedicationDoseLogEntity, String> {
     Optional<MedicationDoseLogEntity> findByScheduleIdAndDoseDate(String scheduleId, LocalDate doseDate);
 
     List<MedicationDoseLogEntity> findByScheduleIdOrderByDoseDateDesc(String scheduleId);
+
+    Page<MedicationDoseLogEntity> findByScheduleIdOrderByDoseDateDesc(String scheduleId, Pageable pageable);
 }

@@ -101,6 +101,7 @@ schemas, status codes, and parameters. The current guarded MVP includes:
   `summary`, `status` (`PENDING_REVIEW`, `RETURNED`, `RELEASED`), `createdAt`, `reviewedAt`. No patient or reviewer
   identifier. Read-only: review decisions remain with the doctor.
 - Patient profile, consent-gated records, medications, vitals, and notifications.
+- Patient home-care/laboratory request histories, medication schedules, and dose histories accept `page` and optional `size` (default 25, maximum 100) and return a Spring `Page`; omitting `page` preserves the existing list response for compatibility.
 - Provider applications, approved-provider directory, availability, and appointments.
 - In-app appointment reminders for both participants, generated within 24 hours and again within 1 hour of a confirmed appointment. These reminders are idempotent; SMS, email, and push delivery remain out of scope.
 - Participant-only text conversations associated with confirmed appointments.

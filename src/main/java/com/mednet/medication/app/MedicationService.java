@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +65,15 @@ public class MedicationService {
         return schedules.findByPatientAccountIdOrderByCreatedAtDesc(patient.getId()).stream()
                 .map(MedicationService::details)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<MedicationDetails> page(String email, int page, int size) {
+        PlatformAccountEntity patient = careAccess.requirePatient(email);
+        audit(email, "medication.schedules_accessed", patient.getId());
+        return schedules.findByPatientAccountIdOrderByCreatedAtDesc(
+                        patient.getId(), pageable(page, size, "createdAt"))
+                .map(MedicationService::details);
     }
 
     @Transactional
@@ -152,6 +164,16 @@ public class MedicationService {
         return doseLogs.findByScheduleIdOrderByDoseDateDesc(scheduleId).stream()
                 .map(MedicationService::toDoseLog)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<DoseLogDetails> doseLogsPage(String email, String scheduleId, int page, int size) {
+        PlatformAccountEntity patient = careAccess.requirePatient(email);
+        ownedSchedule(patient.getId(), scheduleId);
+        audit(email, "medication.dose_history_accessed", scheduleId);
+        return doseLogs.findByScheduleIdOrderByDoseDateDesc(
+                        scheduleId, pageable(page, size, "doseDate"))
+                .map(MedicationService::toDoseLog);
     }
 
     @Transactional
@@ -246,6 +268,16 @@ public class MedicationService {
         } catch (DateTimeException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A valid IANA time zone is required");
         }
+    }
+
+    private static PageRequest pageable(int page, int size, String sortField) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pagination parameters");
+        }
+        return PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, sortField).and(Sort.by(Sort.Direction.DESC, "id")));
     }
 
     private static MedicationDetails details(MedicationScheduleEntity schedule) {

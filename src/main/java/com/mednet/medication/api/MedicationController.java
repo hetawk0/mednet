@@ -5,6 +5,7 @@ import java.time.LocalTime;
 import java.util.List;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mednet.medication.app.MedicationService;
@@ -35,6 +37,14 @@ public class MedicationController {
 
     public MedicationController(MedicationService service) {
         this.service = service;
+    }
+
+    @GetMapping(params = "page")
+    public Page<MedicationDetails> page(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication actor) {
+        return service.page(actor.getName(), page, size);
     }
 
     @GetMapping
@@ -73,6 +83,15 @@ public class MedicationController {
     @PatchMapping("/{id}/stop")
     public MedicationDetails stop(@PathVariable @Size(max = 36) String id, Authentication actor) {
         return service.stop(actor.getName(), id);
+    }
+
+    @GetMapping(value = "/{id}/dose-logs", params = "page")
+    public Page<DoseLogDetails> doseLogsPage(
+            @PathVariable @Size(max = 36) String id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication actor) {
+        return service.doseLogsPage(actor.getName(), id, page, size);
     }
 
     @GetMapping("/{id}/dose-logs")
