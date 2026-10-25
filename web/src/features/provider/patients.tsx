@@ -21,7 +21,7 @@ import type { Appointment, ClinicalRecord, LabResult } from "@/features/patient/
 import { CountBadge, PrivacyCard, ViewBand, ViewColumns } from "@/features/patient/view-frame";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { actionError, useResource } from "@/features/workspace/use-resource";
-import { LIST_PAGE_SIZE } from "@/features/workspace/paging";
+import { LIST_PAGE_SIZE, usePageFor } from "@/features/workspace/paging";
 import { PROVIDER_LIMITS, RECORD_CATEGORIES, providerApi, type ProviderPatientSummary, type RecordCategory } from "./provider-api";
 import type { PatientTab } from "./tabs";
 
@@ -418,7 +418,12 @@ function RecordForm({
 }
 
 export function ResultsToReview({ patientAccountId, patientName }: { patientAccountId: string; patientName?: string }) {
-  const { resource, reload, replace } = useResource((signal) => providerApi.pendingLabResults(patientAccountId, signal), patientAccountId);
+  const [page, setPage] = usePageFor(patientAccountId);
+  const pageSize = 25;
+  const { resource, reload } = useResource(
+    (signal) => providerApi.pendingLabResultsPage(patientAccountId, page, pageSize, signal),
+    `${patientAccountId}-${page}`,
+  );
   const [pending, setPending] = useState<{ result: LabResult; action: "RELEASE" | "RETURN" } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "critical"; text: string } | null>(null);
@@ -428,7 +433,8 @@ export function ResultsToReview({ patientAccountId, patientName }: { patientAcco
     setBusy(true);
     try {
       await providerApi.reviewLabResult(pending.result.id, pending.action);
-      replace(resource.data.filter((item) => item.id !== pending.result.id));
+      if (page > 0 && resource.data.content.length === 1) setPage(page - 1);
+      else reload();
       setNotice({
         tone: "success",
         text: pending.action === "RELEASE" ? "Result released. The patient can now see it, and it was added to their record." : "Result returned to the laboratory.",
@@ -444,16 +450,16 @@ export function ResultsToReview({ patientAccountId, patientName }: { patientAcco
 
   return (
     <Card>
-      <CardHeader eyebrow="Laboratory" title={patientName ? `Results for ${patientName}` : "Results to review"} action={resource.state === "ready" ? <CountBadge count={resource.data.length} noun="result" /> : undefined} />
+      <CardHeader eyebrow="Laboratory" title={patientName ? `Results for ${patientName}` : "Results to review"} action={resource.state === "ready" ? <CountBadge count={resource.data.totalElements} noun="result" /> : undefined} />
       <p className="mt-1.5 text-data text-text-secondary">Patients see a result only after a doctor releases it.</p>
       {notice ? <Alert tone={notice.tone} live={notice.tone === "critical" ? "assertive" : "polite"} title={notice.text} className="mt-4" /> : null}
       {resource.state === "loading" ? (
         <LoadingRows label="Loading results" rows={2} />
       ) : resource.state === "error" ? (
         resource.status === 403 ? <NoAccess message={resource.message} /> : <ErrorRow title="Results could not be loaded." onRetry={reload} status={resource.status} />
-      ) : resource.data.length ? (
+      ) : resource.data.content.length ? (
         <ul aria-label="Results to review" className="mt-4 divide-y divide-line-soft border-t border-border">
-          {resource.data.map((result) => (
+          {resource.data.content.map((result) => (
             <li key={result.id} className="flex flex-col gap-3 py-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span aria-hidden className="inline-flex size-10 shrink-0 items-center justify-center rounded-sm bg-warning-soft text-warning">
@@ -480,6 +486,9 @@ export function ResultsToReview({ patientAccountId, patientName }: { patientAcco
       ) : (
         <StateMessage kind="empty" layout="inline" className="mt-4" title="No results waiting for review." />
       )}
+      {resource.state === "ready" ? (
+        <Pagination page={resource.data.number + 1} totalPages={resource.data.totalPages} onPageChange={(next) => setPage(next - 1)} label="Results to review pages" />
+      ) : null}
       <ConfirmDialog
         open={pending !== null}
         onClose={() => !busy && setPending(null)}
@@ -499,7 +508,9 @@ export function ResultsToReview({ patientAccountId, patientName }: { patientAcco
 }
 
 function PatientVitals({ patientAccountId }: { patientAccountId: string }) {
-  const { resource, reload } = useResource((signal) => providerApi.vitals(patientAccountId, 0, 50, signal), patientAccountId);
+  const pageSize = 25;
+  const [page, setPage] = usePageFor(patientAccountId);
+  const { resource, reload } = useResource((signal) => providerApi.vitals(patientAccountId, page, pageSize, signal), `${patientAccountId}-${page}`);
   return (
     <Card>
       <CardHeader eyebrow="Patient reported" title="Vital readings" action={resource.state === "ready" ? <CountBadge count={resource.data.totalElements} noun="reading" /> : undefined} />
@@ -526,6 +537,9 @@ function PatientVitals({ patientAccountId }: { patientAccountId: string }) {
       ) : (
         <StateMessage kind="empty" layout="inline" className="mt-4" title="No readings recorded." />
       )}
+      {resource.state === "ready" ? (
+        <Pagination page={resource.data.number + 1} totalPages={resource.data.totalPages} onPageChange={(next) => setPage(next - 1)} label="Patient vital reading pages" />
+      ) : null}
     </Card>
   );
 }

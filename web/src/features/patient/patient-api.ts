@@ -109,6 +109,12 @@ export type Medication = {
   status: string;
 };
 
+export type DoseLog = {
+  id: string;
+  doseDate: string;
+  takenAt: string;
+};
+
 /** `MedicationController.MedicationRequest` — times are `HH:mm`, dates `yyyy-MM-dd`, the zone an IANA id. */
 export type MedicationInput = {
   medicationName: string;
@@ -183,11 +189,21 @@ export const patientApi = {
     apiRequest<Appointment>(`/appointments/${encodeURIComponent(id)}`, { method: "PATCH", body: { action } }),
 
   homeCareRequests: (signal?: Signal) => apiRequest<ServiceRequest[]>("/home-care-requests", { signal }),
+  homeCareRequestsPage: (page: number, size: number, filters: { status?: string; search?: string }, signal?: Signal) =>
+    apiRequest<Page<ServiceRequest>>("/home-care-requests", {
+      query: { page, size, status: filters.status || undefined, search: filters.search?.trim() || undefined },
+      signal,
+    }),
   requestHomeCare: (serviceDescription: string, locationDescription: string) =>
     apiRequest<ServiceRequest>("/home-care-requests", { method: "POST", body: { serviceDescription, locationDescription } }),
   cancelHomeCare: (id: string) =>
     apiRequest<ServiceRequest>(`/home-care-requests/${encodeURIComponent(id)}/cancel`, { method: "PATCH" }),
   labRequests: (signal?: Signal) => apiRequest<ServiceRequest[]>("/lab-requests", { signal }),
+  labRequestsPage: (page: number, size: number, filters: { status?: string; search?: string }, signal?: Signal) =>
+    apiRequest<Page<ServiceRequest>>("/lab-requests", {
+      query: { page, size, status: filters.status || undefined, search: filters.search?.trim() || undefined },
+      signal,
+    }),
   requestLab: (testDescription: string) =>
     apiRequest<ServiceRequest>("/lab-requests", { method: "POST", body: { testDescription } }),
   cancelLab: (id: string) => apiRequest<ServiceRequest>(`/lab-requests/${encodeURIComponent(id)}/cancel`, { method: "PATCH" }),
@@ -214,6 +230,13 @@ export const patientApi = {
   labResults: (page = 0, size = 20, signal?: Signal) =>
     apiRequest<Page<LabResult>>("/patients/me/lab-results", { query: { page, size }, signal }),
   medications: (signal?: Signal) => apiRequest<Medication[]>("/patients/me/medications", { signal }),
+  medicationsPage: (page: number, size: number, signal?: Signal) =>
+    apiRequest<Page<Medication>>("/patients/me/medications", { query: { page, size }, signal }),
+  doseLogs: (id: string, page: number, size: number, signal?: Signal) =>
+    apiRequest<Page<DoseLog>>(`/patients/me/medications/${encodeURIComponent(id)}/dose-logs`, {
+      query: { page, size },
+      signal,
+    }),
   createMedication: (medication: MedicationInput) =>
     apiRequest<Medication>("/patients/me/medications", { method: "POST", body: medication }),
   stopMedication: (id: string) =>

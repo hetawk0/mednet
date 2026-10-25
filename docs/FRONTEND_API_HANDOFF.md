@@ -134,17 +134,19 @@ schemas, status codes, and parameters. The current guarded MVP includes:
   after sign-in by role: `ADMIN`/`SUPER_ADMIN` → `/admin`, `PATIENT` → `/patient`,
   `PROVIDER` (approved application) → `/provider`, `LABORATORY` → `/laboratory`, any other role → `/account`.
 - Laboratory staff read back their own submitted results with `GET /api/v1/partner/lab-results` (`LABORATORY` only;
-  results they authored on requests still assigned to them, newest first, latest 100). Fields: `id`, `requestId`,
-  `summary`, `status` (`PENDING_REVIEW`, `RETURNED`, `RELEASED`), `createdAt`, `reviewedAt`. No patient or reviewer
-  identifier. Read-only: review decisions remain with the doctor.
+  results they authored on requests still assigned to them, newest first). The backward-compatible unpaged form is
+  limited to the latest 100; `?page=&size=&status=` is paged and complete, and the laboratory results workspace uses
+  that form. Fields: `id`, `requestId`, `summary`, `status` (`PENDING_REVIEW`, `RETURNED`, `RELEASED`), `createdAt`,
+  `reviewedAt`. No patient or reviewer identifier. Read-only: review decisions remain with the doctor.
 - Patient profile, consent-gated records, medications, vitals, and notifications.
 - Patient home-care/laboratory request histories accept `page` and optional `size` (default 25, maximum 100) and return a Spring `Page`; omitting `page` preserves the existing list response. Both forms accept optional `status` (`OPEN`, `IN_PROGRESS`, `RESOLVED`, or `CANCELLED`) and `search`. Search is trimmed, case-insensitive, limited to 120 characters, and matches only the requested service description or location visible to the patient.
+- Patient request screens use server pagination and status/search filters. Medication reminders, dose-log histories, and patient/provider vital histories also use server-paged lists. Patient-released laboratory results are paged end-to-end; the patient and laboratory results screens expose page navigation and total counts. Legacy unpaged routes remain for compatibility.
 - Assigned partner work queues also accept `page` and `size` (default 25, maximum 100), with optional `status` and `search`; laboratory pages include the latest result status without exposing result text. Results are restricted to the authenticated staff account's assignments of the requested `type` (`HOME_CARE` or `LABORATORY`); search matches only requested service descriptions and locations already visible to that staff role. Omitting `page` preserves the existing list response.
 - For these service-request endpoints, invalid statuses and searches longer than 120 characters return `400`. Medication schedule and dose histories remain paginated as documented below.
 - `GET /api/v1/conversations?page=&size=` and `GET /api/v1/patients/me/record-consents?page=&size=` return paginated histories (default size 25, maximum 100). Omitting `page` preserves the existing list responses; conversation pages include only current eligible care relationships.
 - Provider pending laboratory results for a patient accept optional `page` and `size` (default 25, maximum 100); the existing unpaged response shape remains available. Record-consent and care-relationship checks apply to both forms.
 - Provider applications, approved-provider directory, availability, and appointments.
-- In-app appointment reminders for both participants, generated within 24 hours and again within 1 hour of a confirmed appointment. These reminders are idempotent; SMS, email, and push delivery remain out of scope.
+- In-app appointment reminders for both participants, generated within 24 hours and again within 1 hour of a confirmed appointment. These reminders are idempotent. Email delivery is enabled through account preferences and sends privacy-safe generic notices (appointment status/time only); SMS and push delivery remain out of scope.
 - Participant-only text conversations associated with confirmed appointments. Providers can record one text consultation outcome with `PUT /api/v1/consultations/{id}/outcome` after ending the session; the backend appends an `ENCOUNTER_SUMMARY` only when the existing patient consent and care-relationship checks pass. The end-session endpoint remains backward compatible.
 - Patient home-care and laboratory requests, assigned partner work queues, and laboratory result review/release.
 - Administrator dashboard, provider review, account provisioning, and operational workflows.

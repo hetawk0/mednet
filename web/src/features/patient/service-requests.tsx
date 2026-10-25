@@ -7,12 +7,14 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
-import { TextArea, TextInput } from "@/components/ui/inputs";
+import { Pagination } from "@/components/ui/pagination";
+import { SearchInput, SelectField, TextArea, TextInput } from "@/components/ui/inputs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StateMessage } from "@/components/ui/state-message";
 import { formatDate, formatShortDate, formatWhen } from "./format";
 import { LIMITS, patientApi, type ServiceRequest } from "./patient-api";
 import { actionError, useResource } from "@/features/workspace/use-resource";
+import { useDebouncedValue, usePageFor } from "@/features/workspace/paging";
 import { CountBadge } from "./view-frame";
 
 type Kind = "lab" | "home-care";
@@ -44,28 +46,31 @@ const copy = {
  */
 export function ServiceRequestPanel({ kind }: { kind: Kind }) {
   const text = copy[kind];
-  const { resource, reload, replace } = useResource(
-    (signal) => (kind === "lab" ? patientApi.labRequests(signal) : patientApi.homeCareRequests(signal)),
-    kind,
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const search = useDebouncedValue(query.trim());
+  const filterKey = JSON.stringify([kind, search, status]);
+  const [page, setPage] = usePageFor(filterKey);
+  const { resource, reload } = useResource(
+    (signal) =>
+      kind === "lab"
+        ? patientApi.labRequestsPage(page, 25, { status, search }, signal)
+        : patientApi.homeCareRequestsPage(page, 25, { status, search }, signal),
+    JSON.stringify([filterKey, page]),
   );
   const [cancelling, setCancelling] = useState<ServiceRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "critical"; text: string } | null>(null);
 
-  const requests = resource.state === "ready" ? [...resource.data].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : [];
-
-  function upsert(updated: ServiceRequest) {
-    if (resource.state !== "ready") return reload();
-    const exists = resource.data.some((item) => item.id === updated.id);
-    replace(exists ? resource.data.map((item) => (item.id === updated.id ? updated : item)) : [updated, ...resource.data]);
-  }
+  const requests = resource.state === "ready" ? resource.data.content : [];
 
   async function cancel() {
     if (!cancelling) return;
     setBusy(true);
     try {
-      const updated = await (kind === "lab" ? patientApi.cancelLab(cancelling.id) : patientApi.cancelHomeCare(cancelling.id));
-      upsert(updated);
+      await (kind === "lab" ? patientApi.cancelLab(cancelling.id) : patientApi.cancelHomeCare(cancelling.id));
+      if (status === "OPEN" && requests.length === 1 && page > 0) setPage(page - 1);
+      else reload();
       setNotice({ tone: "success", text: "Request cancelled." });
     } catch (error) {
       setNotice({ tone: "critical", text: actionError(error, "The request could not be cancelled.") });
@@ -82,11 +87,32 @@ export function ServiceRequestPanel({ kind }: { kind: Kind }) {
         <CardHeader
           eyebrow={text.eyebrow}
           title={text.title}
-          action={resource.state === "ready" ? <CountBadge count={requests.length} noun={text.noun} /> : undefined}
+          action={resource.state === "ready" ? <CountBadge count={resource.data.totalElements} noun={text.noun} /> : undefined}
         />
         {notice ? (
           <Alert tone={notice.tone} live={notice.tone === "critical" ? "assertive" : "polite"} title={notice.text} className="mt-4" />
         ) : null}
+        <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <SearchInput
+            label={`Search ${text.title.toLowerCase()}`}
+            placeholder="Search request details"
+            maxLength={120}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <SelectField
+            label="Filter by status"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            options={[
+              { value: "", label: "All statuses" },
+              { value: "OPEN", label: "Open" },
+              { value: "IN_PROGRESS", label: "In progress" },
+              { value: "RESOLVED", label: "Resolved" },
+              { value: "CANCELLED", label: "Cancelled" },
+            ]}
+          />
+        </div>
         <div className="mt-4 border-t border-border">
           {resource.state === "loading" ? (
             <div aria-busy className="flex flex-col gap-3 py-4">
@@ -144,12 +170,18 @@ export function ServiceRequestPanel({ kind }: { kind: Kind }) {
             <StateMessage kind="empty" layout="inline" className="mt-4" title={text.empty} />
           )}
         </div>
+        {resource.state === "ready" ? (
+          <Pagination page={resource.data.number + 1} totalPages={resource.data.totalPages} onPageChange={(next) => setPage(next - 1)} label={`${text.title} pages`} />
+        ) : null}
       </Card>
 
       <RequestForm
         kind={kind}
-        onCreated={(created) => {
-          upsert(created);
+        onCreated={() => {
+          setQuery("");
+          setStatus("");
+          if (page === 0 && !search && !status) reload();
+          else setPage(0);
           setNotice({ tone: "success", text: "Request sent." });
         }}
       />

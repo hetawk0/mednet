@@ -66,7 +66,10 @@ export function PatientOverview() {
     ),
   );
   const requests = useResource((signal) =>
-    Promise.all([patientApi.labRequests(signal), patientApi.homeCareRequests(signal)]).then(([lab, homeCare]) => ({ lab, homeCare })),
+    Promise.all([
+      patientApi.labRequestsPage(0, 4, {}, signal),
+      patientApi.homeCareRequestsPage(0, 4, {}, signal),
+    ]).then(([lab, homeCare]) => ({ lab: lab.content, homeCare: homeCare.content })),
   );
   const notifications = useResource((signal) => patientApi.notifications(0, 5, signal));
 

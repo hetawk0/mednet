@@ -462,9 +462,10 @@ assertion waits) and passed completely. The API logged no errors. The workflow I
 ### Approved backend changes (§7, §8)
 
 - **§7 Laboratory result read-back:** `GET /api/v1/partner/lab-results` (`LABORATORY` only). Returns results
-  **authored by the caller on requests still assigned to the caller**, newest first, latest 100, as
+  **authored by the caller on requests still assigned to the caller**, newest first, as
   `LaboratoryResultDetails` (id, requestId, summary, status, createdAt, reviewedAt) — no patient or reviewer
-  identifier. Read-only; no change to review or release. Uses the existing `author_account_id` column: no
+  identifier. The compatibility route without `page` is limited to 100; active result screens use the complete,
+  paged `?page=&size=&status=` API. Read-only; no change to review or release. Uses the existing `author_account_id` column: no
   migration, no other authorization change. Audit action `laboratory_result.partner_accessed` (the first name
   exceeded the 40-character audit column; caught by the backend test).
   - Tests: pending → returned → released read-back; another laboratory sees an empty list; patient, doctor,

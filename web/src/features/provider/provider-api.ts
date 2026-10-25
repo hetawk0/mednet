@@ -114,6 +114,11 @@ export const providerApi = {
     apiRequest<ReviewQueuePage>("/providers/me/lab-review-queue", { query: { page, size }, signal }),
   pendingLabResults: (patientAccountId: string, signal?: Signal) =>
     apiRequest<LabResult[]>(`/patients/${id(patientAccountId)}/lab-results/pending`, { signal }),
+  pendingLabResultsPage: (patientAccountId: string, page: number, size: number, signal?: Signal) =>
+    apiRequest<Page<LabResult>>(`/patients/${id(patientAccountId)}/lab-results/pending`, {
+      query: { page, size },
+      signal,
+    }),
   reviewLabResult: (resultId: string, action: "RELEASE" | "RETURN") =>
     apiRequest<LabResult>(`/lab-results/${id(resultId)}/review`, { method: "PATCH", body: { action } }),
 

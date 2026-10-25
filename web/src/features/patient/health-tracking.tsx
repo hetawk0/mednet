@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { TextInput } from "@/components/ui/inputs";
+import { Pagination } from "@/components/ui/pagination";
 import { StateMessage } from "@/components/ui/state-message";
 import { CARE_TIME_ZONE, careDay } from "@/features/find-care/format";
 import { formatDate, formatWhen } from "./format";
-import { LIMITS, patientApi, type Medication, type Vital } from "./patient-api";
+import { LIMITS, patientApi, type DoseLog, type Medication, type Vital } from "./patient-api";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { actionError, useResource } from "@/features/workspace/use-resource";
+import { usePageFor } from "@/features/workspace/paging";
 import { CountBadge } from "./view-frame";
 
 /**
@@ -26,18 +28,35 @@ type Notice = { tone: "success" | "critical"; text: string } | null;
 
 /** Reminder schedules use the care time zone; the API accepts any IANA zone. */
 const REMINDER_TIME_ZONE = CARE_TIME_ZONE;
+const MEDICATION_PAGE_SIZE = 25;
 
 export function MedicationPanel() {
-  const { resource, reload, replace } = useResource((signal) => patientApi.medications(signal));
+  const [page, setPage] = usePageFor("medications");
+  const { resource, reload, replace } = useResource(
+    (signal) => patientApi.medicationsPage(page, MEDICATION_PAGE_SIZE, signal),
+    String(page),
+  );
   const [stopping, setStopping] = useState<Medication | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
-  const medications = resource.state === "ready" ? resource.data : [];
+  const medications = resource.state === "ready" ? resource.data.content : [];
 
   function upsert(updated: Medication) {
     if (resource.state !== "ready") return reload();
-    const exists = resource.data.some((item) => item.id === updated.id);
-    replace(exists ? resource.data.map((item) => (item.id === updated.id ? updated : item)) : [updated, ...resource.data]);
+    const exists = resource.data.content.some((item) => item.id === updated.id);
+    if (!exists && page > 0) {
+      setPage(0);
+      return;
+    }
+    replace({
+      ...resource.data,
+      totalElements: resource.data.totalElements + (exists ? 0 : 1),
+      content: exists
+        ? resource.data.content.map((item) => (item.id === updated.id ? updated : item))
+        : [updated, ...resource.data.content].slice(0, MEDICATION_PAGE_SIZE),
+    });
   }
 
   async function stop() {
@@ -60,6 +79,7 @@ export function MedicationPanel() {
     try {
       await patientApi.logDose(medication.id);
       setNotice({ tone: "success", text: `Today’s dose of ${medication.medicationName} recorded.` });
+      setHistoryVersion((version) => version + 1);
       reload();
     } catch (error) {
       setNotice({ tone: "critical", text: actionError(error, "The dose could not be recorded.") });
@@ -74,7 +94,7 @@ export function MedicationPanel() {
         <CardHeader
           eyebrow="Your notes"
           title="Medication reminders"
-          action={resource.state === "ready" ? <CountBadge count={medications.length} noun="reminder" /> : undefined}
+          action={resource.state === "ready" ? <CountBadge count={resource.data.totalElements} noun="reminder" /> : undefined}
         />
         <p className="mt-1.5 text-data text-text-secondary">
           Reminders you set for medicines you already take. They are not prescriptions; follow your doctor’s instructions.
@@ -131,6 +151,20 @@ export function MedicationPanel() {
                       </Button>
                     </div>
                   ) : null}
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    aria-expanded={historyId === medication.id}
+                    aria-controls={`dose-history-${medication.id}`}
+                    onClick={() => setHistoryId(historyId === medication.id ? null : medication.id)}
+                  >
+                    {historyId === medication.id ? "Hide dose history" : "Dose history"}
+                  </Button>
+                  {historyId === medication.id ? (
+                    <div id={`dose-history-${medication.id}`} className="basis-full">
+                      <DoseHistory scheduleId={medication.id} refreshKey={historyVersion} />
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -138,6 +172,9 @@ export function MedicationPanel() {
             <StateMessage kind="empty" layout="inline" className="mt-4" title="No medication reminders yet." />
           )}
         </div>
+        {resource.state === "ready" ? (
+          <Pagination page={resource.data.number + 1} totalPages={resource.data.totalPages} onPageChange={(next) => setPage(next - 1)} label="Medication reminder pages" />
+        ) : null}
       </Card>
 
       <MedicationForm
@@ -158,6 +195,43 @@ export function MedicationPanel() {
         confirmLabel="Stop reminders"
       />
     </div>
+  );
+}
+
+function DoseHistory({ scheduleId, refreshKey }: { scheduleId: string; refreshKey: number }) {
+  const pageSize = 20;
+  const [page, setPage] = usePageFor(`${scheduleId}-${refreshKey}`);
+  const { resource, reload } = useResource(
+    (signal) => patientApi.doseLogs(scheduleId, page, pageSize, signal),
+    `${scheduleId}-${page}`,
+  );
+  const logs: DoseLog[] = resource.state === "ready" ? resource.data.content : [];
+
+  return (
+    <section aria-label="Dose history" className="rounded-sm border border-border bg-surface-soft p-4">
+      <h3 className="font-semibold text-ink">
+        Dose history{resource.state === "ready" ? ` · ${resource.data.totalElements} recorded doses` : ""}
+      </h3>
+      {resource.state === "loading" ? (
+        <LoadingRows label="Loading dose history" rows={2} />
+      ) : resource.state === "error" ? (
+        <ErrorRow title="Dose history could not be loaded." onRetry={reload} status={resource.status} />
+      ) : logs.length ? (
+        <ul className="mt-2 divide-y divide-line-soft">
+          {logs.map((log) => (
+            <li key={log.id} className="flex flex-wrap justify-between gap-2 py-2 text-caption">
+              <span>{formatDate(log.doseDate)}</span>
+              <time dateTime={log.takenAt}>Recorded {formatWhen(log.takenAt)}</time>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <StateMessage kind="empty" layout="inline" className="mt-2" title="No doses recorded yet." />
+      )}
+      {resource.state === "ready" ? (
+        <Pagination page={resource.data.number + 1} totalPages={resource.data.totalPages} onPageChange={(next) => setPage(next - 1)} label="Dose history pages" />
+      ) : null}
+    </section>
   );
 }
 
@@ -244,7 +318,8 @@ function MedicationForm({ onCreated }: { onCreated: (medication: Medication) => 
 const VITAL_PAGE_SIZE = 20;
 
 export function VitalPanel() {
-  const { resource, reload, replace } = useResource((signal) => patientApi.vitals(0, VITAL_PAGE_SIZE, signal));
+  const [page, setPage] = usePageFor("patient-vitals");
+  const { resource, reload, replace } = useResource((signal) => patientApi.vitals(page, VITAL_PAGE_SIZE, signal), String(page));
   const [notice, setNotice] = useState<Notice>(null);
   const vitals: Vital[] = resource.state === "ready" ? resource.data.content : [];
 
@@ -288,18 +363,24 @@ export function VitalPanel() {
             <StateMessage kind="empty" layout="inline" className="mt-4" title="No readings yet." />
           )}
         </div>
+        {resource.state === "ready" ? (
+          <Pagination page={resource.data.number + 1} totalPages={resource.data.totalPages} onPageChange={(next) => setPage(next - 1)} label="Vital reading pages" />
+        ) : null}
       </Card>
 
       <VitalForm
         onCreated={(created) => {
           if (resource.state === "ready") {
-            replace({
-              ...resource.data,
-              totalElements: resource.data.totalElements + 1,
-              content: [created, ...resource.data.content]
-                .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
-                .slice(0, VITAL_PAGE_SIZE),
-            });
+            if (page > 0) setPage(0);
+            else {
+              replace({
+                ...resource.data,
+                totalElements: resource.data.totalElements + 1,
+                content: [created, ...resource.data.content]
+                  .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
+                  .slice(0, VITAL_PAGE_SIZE),
+              });
+            }
           } else reload();
           setNotice({ tone: "success", text: `${created.metric} reading saved.` });
         }}
