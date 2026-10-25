@@ -77,10 +77,20 @@ Verified controls first; recommendations and blocked items follow in their own t
 
 | Test | Blocked by |
 |---|---|
-| `mvn -Ppostgres-it verify` (`PostgreSqlIntegrationIT`, `PostgreSqlWorkflowIT`, which now also runs the 31-endpoint signed-out test and the V1 test) | Credential rotation |
+| Manual `mvn -Ppostgres-it verify` against the existing database | Credential rotation; automated isolated PostgreSQL CI is configured below |
 | Seven live-API suites (incl. `home-care.live`) against `mednet_e2e_test` | Credential rotation |
 | `AuthenticationAbuseTests` against PostgreSQL | Credential rotation (needs a PostgreSQL variant; the limiter itself holds no database state) |
 | Google OAuth end to end, per role | Development OAuth client |
+
+## PostgreSQL CI verification
+
+`.github/workflows/verify.yml` is configured to run the PostgreSQL integration/workflow profile against a fresh,
+ephemeral PostgreSQL service. The workflow creates a randomly credentialed, non-superuser role that
+owns a database ending in `_test`; the test harness refuses to reset any database that does not meet
+those ownership/name checks. These CI credentials are generated per run and are not reused in any
+deployment. A successful CI run verifies migrations and application workflows against PostgreSQL,
+but does not confirm production database ownership, credential rotation, or the safety of existing
+production data. Those owner checks remain blocked until the deployment owner confirms them.
 
 ## Rate limiting
 
