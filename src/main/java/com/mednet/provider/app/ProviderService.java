@@ -19,6 +19,8 @@ import org.springframework.web.server.ResponseStatusException;
 import com.mednet.api.Pagination;
 import com.mednet.admin.data.AdminAuditEventEntity;
 import com.mednet.admin.data.AdminAuditEventRepository;
+import com.mednet.patient.app.PatientCareAccess;
+import com.mednet.patient.data.PatientProfileRepository;
 import com.mednet.notification.app.NotificationService;
 import com.mednet.provider.data.ProviderApplicationEntity;
 import com.mednet.provider.data.ProviderApplicationRepository;
@@ -34,16 +36,45 @@ public class ProviderService {
     private final ProviderAvailabilitySlotRepository slots;
     private final AdminAuditEventRepository auditEvents;
     private final NotificationService notifications;
+    private final PatientCareAccess careAccess;
+    private final PatientProfileRepository patientProfiles;
 
     public ProviderService(
             ProviderApplicationRepository applications,
             ProviderAvailabilitySlotRepository slots,
             AdminAuditEventRepository auditEvents,
-            NotificationService notifications) {
+            NotificationService notifications,
+            PatientCareAccess careAccess,
+            PatientProfileRepository patientProfiles) {
         this.applications = applications;
         this.slots = slots;
         this.auditEvents = auditEvents;
         this.notifications = notifications;
+        this.careAccess = careAccess;
+        this.patientProfiles = patientProfiles;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProviderPatientSummary> patients(String actorEmail, int page, int size) {
+        var provider = careAccess.requireApprovedProviderByEmail(actorEmail);
+        return patientProfiles.findProviderCarePatients(
+                        provider.getId(),
+                        PatientCareAccess.CARE_STATUSES,
+                        Pagination.pageRequest(
+                                page,
+                                size,
+                                Sort.by(Sort.Order.asc("fullName"), Sort.Order.asc("accountId"))))
+                .map(entry -> new ProviderPatientSummary(entry.getPatientAccountId(), entry.getName()));
+    }
+
+    @Transactional(readOnly = true)
+    public ProviderPatientSummary patient(String actorEmail, String patientAccountId) {
+        var provider = careAccess.requireApprovedProviderByEmail(actorEmail);
+        return patientProfiles.findProviderCarePatient(
+                        patientAccountId, provider.getId(), PatientCareAccess.CARE_STATUSES)
+                .map(entry -> new ProviderPatientSummary(entry.getPatientAccountId(), entry.getName()))
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Patient not found"));
     }
 
     @Transactional(readOnly = true)
@@ -184,5 +215,8 @@ public class ProviderService {
     }
 
     public record SpecialtyCount(String specialty, long providers) {
+    }
+
+    public record ProviderPatientSummary(String patientAccountId, String name) {
     }
 }

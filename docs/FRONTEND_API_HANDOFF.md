@@ -68,6 +68,20 @@ Phase 5D (performance; additive, backward compatible — every list keeps its ol
 - `GET /partner/service-requests?type=LABORATORY` rows add `latestResult` (`{id, status, createdAt,
   reviewedAt}` or null; no text).
 
+Appointment and provider-patient history is paged server-side (zero-based `page`, default `size=25`,
+maximum `size=100`). `GET /appointments` continues to return only the authenticated patient's or
+approved provider's appointments, with deterministic creation-time/ID ordering. Patient and provider
+appointment views navigate every page while retaining their existing status groupings and actions.
+The provider patient directory uses `GET /providers/me/patients?page=&size=` instead of deriving
+patients from one appointment page. It returns only active patient accounts with an eligible
+`CONFIRMED`, `COMPLETED`, or `RESCHEDULE_REQUESTED` care relationship to the authenticated approved
+provider, ordered by patient name and account ID. The response contains only patient account ID and
+profile name; it does not grant record access. `GET /providers/me/patients/{patientAccountId}` applies
+the same relationship check for a detail page, and
+`GET /providers/me/patients/{patientAccountId}/appointments?page=&size=` returns that relationship's
+appointment history, still scoped to the authenticated provider. All three routes are provider-only;
+the nested history route validates pagination and care access on the server.
+
 Admin CSV exports are frontend-only and use the existing paged admin endpoints above; no API route or
 authorization rule was added. Audit export reuses the current search and record-type filters, while
 home-care/laboratory request exports reuse the selected request type and status filter. Appointment

@@ -25,20 +25,26 @@ export type Resource<T> =
  * blanking the current data; `replace()` applies a server response from a mutation.
  */
 export function useResource<T>(load: (signal: AbortSignal) => Promise<T>, key: string = "") {
-  const [resource, setResource] = useState<Resource<T>>({ state: "loading" });
+  const [snapshot, setSnapshot] = useState<{ key: string; resource: Resource<T> }>({
+    key,
+    resource: { state: "loading" },
+  });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     load(controller.signal)
-      .then((data) => !controller.signal.aborted && setResource({ state: "ready", data }))
+      .then((data) => !controller.signal.aborted && setSnapshot({ key, resource: { state: "ready", data } }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         if (error instanceof ApiRequestError && error.isUnauthenticated) reportSessionExpired();
-        setResource({
-          state: "error",
-          status: error instanceof ApiRequestError ? error.status : 0,
-          message: error instanceof Error ? error.message : "The request failed.",
+        setSnapshot({
+          key,
+          resource: {
+            state: "error",
+            status: error instanceof ApiRequestError ? error.status : 0,
+            message: error instanceof Error ? error.message : "The request failed.",
+          },
         });
       });
     return () => controller.abort();
@@ -47,7 +53,11 @@ export function useResource<T>(load: (signal: AbortSignal) => Promise<T>, key: s
   }, [key, attempt]);
 
   const reload = useCallback(() => setAttempt((count) => count + 1), []);
-  const replace = useCallback((data: T) => setResource({ state: "ready", data }), []);
+  const replace = useCallback(
+    (data: T) => setSnapshot({ key, resource: { state: "ready", data } }),
+    [key],
+  );
+  const resource = snapshot.key === key ? snapshot.resource : { state: "loading" as const };
   return { resource, reload, replace };
 }
 

@@ -25,6 +25,9 @@ public interface AppointmentRepository extends JpaRepository<AppointmentEntity, 
 
     Page<AppointmentEntity> findByProviderApplicationId(String providerApplicationId, Pageable pageable);
 
+    Page<AppointmentEntity> findByProviderApplicationIdAndPatientAccountId(
+            String providerApplicationId, String patientAccountId, Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<AppointmentEntity> findFirstByPatientAccountIdAndProviderApplicationIdAndStatusInOrderByCreatedAtDesc(
             String patientAccountId, String providerApplicationId, Collection<String> statuses);

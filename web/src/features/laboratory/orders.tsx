@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { StatusTimeline } from "@/components/healthcare/status-timeline";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -9,9 +9,11 @@ import { DataTable, type DataColumn } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { SearchInput, SelectField, TextArea } from "@/components/ui/inputs";
 import { DescriptionList } from "@/components/ui/lists";
+import { Pagination } from "@/components/ui/pagination";
 import { ApiRequestError } from "@/lib/api";
 import { ErrorRow } from "@/features/workspace/states";
 import { actionError } from "@/features/workspace/use-resource";
+import { usePartnerQueuePage, usePartnerQueueQuery } from "@/features/workspace/partner-queue";
 import {
   ListCard,
   NoRecordSelected,
@@ -37,22 +39,51 @@ export function OrderQueue({
   limit?: number;
   title?: string;
 }) {
-  const { requests, reloadRequests, latestResult } = useLaboratory();
-  const [status, setStatus] = useState(defaultStatus);
-  const [query, setQuery] = useState("");
+  return (
+    <Suspense fallback={<p role="status" className="text-data text-text-secondary">Loading laboratory orders…</p>}>
+      <PagedOrderQueue defaultStatus={defaultStatus} limit={limit} title={title} />
+    </Suspense>
+  );
+}
+
+function PagedOrderQueue({
+  defaultStatus,
+  limit,
+  title,
+}: {
+  defaultStatus: string;
+  limit?: number;
+  title: string;
+}) {
+  const { latestResult } = useLaboratory();
+  const path = limit ? "/laboratory" : "/laboratory/orders";
+  const { query, navigate } = usePartnerQueueQuery(path);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "critical"; text: string } | null>(null);
-
-  const all = requests.state === "ready" ? requests.data : [];
-  const needle = query.trim().toLowerCase();
-  const filtered = all.filter(
-    (request) =>
-      (!status || request.status === status) &&
-      (!needle || labReference(request.id).toLowerCase().includes(needle) || request.requestedService.toLowerCase().includes(needle)),
+  const pageSize = limit ?? 25;
+  const requestKey = JSON.stringify([query.status || defaultStatus, query.search, query.page, pageSize]);
+  const { resource, reload } = usePartnerQueuePage(
+    (signal) => labApi.requestsPage({
+      page: query.page - 1,
+      size: pageSize,
+      status: query.status || defaultStatus || undefined,
+      search: query.search.trim() || undefined,
+    }, signal),
+    requestKey,
   );
-  const rows = limit ? filtered.slice(0, limit) : filtered;
+
+  const all = resource.state === "ready" ? resource.data.content : [];
+  const rows = all;
   const selected = all.find((request) => request.id === selectedId) ?? null;
   const newCount = all.filter((request) => request.status === "OPEN").length;
+  const filtered = Boolean(query.search || query.status || defaultStatus);
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const search = formData.get("search");
+    navigate({ ...query, search: typeof search === "string" ? search.trim() : "", page: 1 });
+  }
 
   const columns: DataColumn<LabRequest>[] = [
     {
@@ -66,8 +97,8 @@ export function OrderQueue({
       id: "status",
       header: "Status",
       cell: (request) => (
-        <Badge tone={orderBadge(request, latestResult(request.id)).tone} className="whitespace-nowrap">
-          {orderBadge(request, latestResult(request.id)).label}
+        <Badge tone={orderBadge(request, latestResult(request.id) ?? request.latestResult).tone} className="whitespace-nowrap">
+          {orderBadge(request, latestResult(request.id) ?? request.latestResult).label}
         </Badge>
       ),
     },
@@ -110,20 +141,28 @@ export function OrderQueue({
           <ListCard
             eyebrow="Assigned work"
             title={title}
-            action={newCount ? <Badge tone="warning">{`${newCount} not started`}</Badge> : undefined}
+            action={newCount ? <Badge tone="warning">{`${newCount} on this page not started`}</Badge> : undefined}
           >
-            <div role="search" aria-label="Order filters" className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-              <SearchInput label="Search orders" placeholder="Order reference or test" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <form onSubmit={submitSearch} role="search" aria-label="Order filters" className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] md:items-end">
+              <SearchInput
+                label="Search orders"
+                placeholder="Test or location"
+                maxLength={120}
+                key={query.search}
+                name="search"
+                defaultValue={query.search}
+              />
               <SelectField
                 label="Order status"
                 hideLabel
-                value={status}
-                onChange={(event) => setStatus(event.target.value)}
+                value={query.status || defaultStatus}
+                onChange={(event) => navigate({ ...query, status: event.target.value, page: 1 })}
                 options={[{ value: "", label: "Status: all" }, ...Object.entries(LAB_REQUEST_STATUS).map(([value, { label }]) => ({ value, label }))]}
               />
-            </div>
-            {requests.state === "error" ? (
-              <ErrorRow title="Your assigned orders could not be loaded" status={requests.status} onRetry={reloadRequests} />
+              <Button type="submit" variant="secondary">Search</Button>
+            </form>
+            {resource.state === "error" ? (
+              <ErrorRow title="Your assigned orders could not be loaded" status={resource.status} onRetry={reload} />
             ) : (
               <DataTable
                 caption={title}
@@ -131,15 +170,23 @@ export function OrderQueue({
                 rows={rows}
                 rowKey={(request) => request.id}
                 selectedKey={selectedId ?? undefined}
-                loading={requests.state === "loading"}
+                loading={resource.state === "loading"}
                 empty={{
-                  title: all.length ? "No orders match" : "No orders are assigned to you",
-                  description: all.length ? undefined : "A MedNet administrator assigns laboratory requests to your account.",
+                  title: filtered ? "No orders match these filters" : "No orders are assigned to you",
+                  description: filtered ? "Try different search words or clear the status filter." : "A MedNet administrator assigns laboratory requests to your account.",
                 }}
               />
             )}
-            {limit && filtered.length > limit ? (
-              <p className="text-caption text-text-secondary">{`Showing ${limit} of ${filtered.length}. All orders are under Orders.`}</p>
+            {!limit && resource.state === "ready" ? (
+              <Pagination
+                page={resource.data.number + 1}
+                totalPages={resource.data.totalPages}
+                onPageChange={(next) => navigate({ ...query, page: next })}
+                label="Order queue pages"
+              />
+            ) : null}
+            {limit && resource.state === "ready" && resource.data.totalElements > limit ? (
+              <p className="text-caption text-text-secondary">{`Showing ${limit} of ${resource.data.totalElements}. All orders are under Orders.`}</p>
             ) : null}
           </ListCard>
         }
@@ -149,6 +196,7 @@ export function OrderQueue({
               key={selected.id}
               request={selected}
               onNotice={setNotice}
+              onQueueChange={reload}
             />
           ) : (
             <NoRecordSelected>Open an order to see the requested test and what you can do next.</NoRecordSelected>
@@ -162,14 +210,16 @@ export function OrderQueue({
 function OrderDetail({
   request,
   onNotice,
+  onQueueChange,
 }: {
   request: LabRequest;
   onNotice: (notice: { tone: "success" | "critical"; text: string }) => void;
+  onQueueChange: () => void;
 }) {
   const { replaceRequest, reloadRequests, latestResult, addResult } = useLaboratory();
   const [confirmStart, setConfirmStart] = useState(false);
   const [starting, setStarting] = useState(false);
-  const latest = latestResult(request.id);
+  const latest = latestResult(request.id) ?? request.latestResult;
   const pendingReview = latest?.status === "PENDING_REVIEW";
   const returned = latest?.status === "RETURNED";
   const reference = labReference(request.id);
@@ -179,11 +229,15 @@ function OrderDetail({
     try {
       const saved = await labApi.startProcessing(request.id);
       replaceRequest(saved);
+      onQueueChange();
       onNotice({ tone: "success", text: `${reference} is processing. The patient was notified.` });
     } catch (error) {
       onNotice({ tone: "critical", text: actionError(error, "The order could not be started.") });
       // The order may have changed elsewhere (cancelled by the patient or an administrator).
-      if (error instanceof ApiRequestError && (error.status === 409 || error.status === 404)) reloadRequests();
+      if (error instanceof ApiRequestError && (error.status === 409 || error.status === 404)) {
+        reloadRequests();
+        onQueueChange();
+      }
     } finally {
       setStarting(false);
       setConfirmStart(false);
@@ -234,12 +288,15 @@ function OrderDetail({
                 correction={returned}
                 onSubmitted={(saved) => {
                   addResult(saved);
+                  onQueueChange();
                   onNotice({ tone: "success", text: `Result for ${reference} submitted for doctor review. It is not released to the patient yet.` });
                 }}
                 onAlreadyPending={() => {
                   reloadRequests();
+                  onQueueChange();
                   onNotice({ tone: "critical", text: "A result for this order is already awaiting doctor review." });
                 }}
+                onQueueChange={onQueueChange}
               />
             </>
           )
@@ -273,11 +330,13 @@ function ResultForm({
   correction = false,
   onSubmitted,
   onAlreadyPending,
+  onQueueChange,
 }: {
   request: LabRequest;
   correction?: boolean;
   onSubmitted: (result: SubmittedResult) => void;
   onAlreadyPending: () => void;
+  onQueueChange: () => void;
 }) {
   const { reloadRequests } = useLaboratory();
   const [summary, setSummary] = useState("");
@@ -310,7 +369,10 @@ function ResultForm({
         onAlreadyPending();
       } else {
         setFailure(actionError(caught, "The result could not be submitted."));
-        if (caught instanceof ApiRequestError && (caught.status === 409 || caught.status === 404)) reloadRequests();
+        if (caught instanceof ApiRequestError && (caught.status === 409 || caught.status === 404)) {
+          reloadRequests();
+          onQueueChange();
+        }
       }
     } finally {
       setBusy(false);

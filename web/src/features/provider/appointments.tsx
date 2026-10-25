@@ -10,6 +10,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog, Dialog, Drawer } from "@/components/ui/dialog";
 import { RadioGroup } from "@/components/ui/inputs";
 import { DescriptionList } from "@/components/ui/lists";
+import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StateMessage } from "@/components/ui/state-message";
 import { Tabs } from "@/components/ui/tabs";
@@ -85,7 +86,8 @@ export function availableActions(appointment: Appointment, now = new Date()) {
 
 export function ProviderAppointments({ tab, selectedId }: { tab: ProviderAppointmentTab; selectedId?: string }) {
   const router = useRouter();
-  const { resource, reload, replace } = useResource((signal) => providerApi.appointments(0, 100, signal));
+  const [page, setPage] = useState(0);
+  const { resource, reload, replace } = useResource((signal) => providerApi.appointments(page, 25, signal), String(page));
   const [pending, setPending] = useState<Pending | null>(null);
   const [proposing, setProposing] = useState<Appointment | null>(null);
   const [detailId, setDetailId] = useState<string | undefined>(selectedId);
@@ -130,7 +132,12 @@ export function ProviderAppointments({ tab, selectedId }: { tab: ProviderAppoint
         ))}
       </ul>
     ) : (
-      <StateMessage kind="empty" layout="inline" className="mt-4" title={empty} />
+      <StateMessage
+        kind="empty"
+        layout="inline"
+        className="mt-4"
+        title={resource.state === "ready" && resource.data.totalElements > 0 ? `${empty.replace(/\.$/, "")} on this page.` : empty}
+      />
     );
 
   const panel = (title: string, items: Appointment[] | undefined, empty: string) => (
@@ -149,11 +156,6 @@ export function ProviderAppointments({ tab, selectedId }: { tab: ProviderAppoint
       ) : (
         list(items ?? [], empty, title)
       )}
-      {resource.state === "ready" && resource.data.totalElements > resource.data.content.length ? (
-        <p className="mt-4 text-caption text-text-secondary">
-          Showing the {resource.data.content.length} most recent requests of {resource.data.totalElements}.
-        </p>
-      ) : null}
     </Card>
   );
 
@@ -201,6 +203,19 @@ export function ProviderAppointments({ tab, selectedId }: { tab: ProviderAppoint
             },
           ]}
         />
+        {resource.state === "ready" && resource.data.totalPages > 1 ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+            <p className="text-caption text-text-secondary" aria-live="polite">
+              Showing appointments {page * resource.data.size + 1}–{page * resource.data.size + resource.data.content.length} of {resource.data.totalElements}.
+            </p>
+            <Pagination
+              page={page + 1}
+              totalPages={resource.data.totalPages}
+              onPageChange={(nextPage) => setPage(nextPage - 1)}
+              label="Appointment history pages"
+            />
+          </div>
+        ) : null}
       </ViewColumns>
 
       {detailId ? (

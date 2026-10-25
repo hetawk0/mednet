@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { StatusTimeline } from "@/components/healthcare/status-timeline";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,10 @@ import { DataTable, type DataColumn } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { SearchInput, SelectField, TextInput } from "@/components/ui/inputs";
 import { DescriptionList } from "@/components/ui/lists";
+import { Pagination } from "@/components/ui/pagination";
 import { ApiRequestError } from "@/lib/api";
 import { ErrorRow } from "@/features/workspace/states";
+import { usePartnerQueuePage, usePartnerQueueQuery } from "@/features/workspace/partner-queue";
 import { actionError } from "@/features/workspace/use-resource";
 import {
   ListCard,
@@ -22,7 +24,6 @@ import {
 import { homeCareApi, type HomeCareRequest } from "./home-care-api";
 import { useHomeCare } from "./home-care-workspace";
 import {
-  HOME_CARE_STAGE,
   homeCareBadge,
   homeCareReference,
   homeCareStage,
@@ -40,25 +41,42 @@ type Notice = { tone: "success" | "critical"; text: string };
  * or contact, no reassignment, no rescheduling (the API sets a visit time once), no visit notes.
  */
 export function VisitQueue({ limit, title = "Assigned home-care visits" }: { limit?: number; title?: string }) {
-  const { requests, reloadRequests } = useHomeCare();
-  const [stage, setStage] = useState("");
-  const [query, setQuery] = useState("");
+  return (
+    <Suspense fallback={<p role="status" className="text-data text-text-secondary">Loading assigned visits…</p>}>
+      <PagedVisitQueue limit={limit} title={title} />
+    </Suspense>
+  );
+}
+
+function PagedVisitQueue({ limit, title }: { limit?: number; title: string }) {
+  const path = limit ? "/home-care" : "/home-care/visits";
+  const { query, navigate } = usePartnerQueueQuery(path);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-
-  const all = requests.state === "ready" ? sortForQueue(requests.data) : [];
-  const needle = query.trim().toLowerCase();
-  const filtered = all.filter(
-    (request) =>
-      (!stage || homeCareStage(request) === stage) &&
-      (!needle ||
-        homeCareReference(request.id).toLowerCase().includes(needle) ||
-        request.requestedService.toLowerCase().includes(needle) ||
-        (request.locationDescription ?? "").toLowerCase().includes(needle)),
+  const pageSize = limit ?? 25;
+  const requestKey = JSON.stringify([query.status, query.search, query.page, pageSize]);
+  const { resource, reload } = usePartnerQueuePage(
+    (signal) => homeCareApi.requestsPage({
+      page: query.page - 1,
+      size: pageSize,
+      status: query.status || undefined,
+      search: query.search.trim() || undefined,
+    }, signal),
+    requestKey,
   );
-  const rows = limit ? filtered.slice(0, limit) : filtered;
+
+  const all = resource.state === "ready" ? sortForQueue(resource.data.content) : [];
+  const rows = all;
   const selected = all.find((request) => request.id === selectedId) ?? null;
   const toSchedule = all.filter((request) => homeCareStage(request) === "unscheduled").length;
+  const filtered = Boolean(query.search || query.status);
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const search = formData.get("search");
+    navigate({ ...query, search: typeof search === "string" ? search.trim() : "", page: 1 });
+  }
 
   const columns: DataColumn<HomeCareRequest>[] = [
     {
@@ -120,25 +138,34 @@ export function VisitQueue({ limit, title = "Assigned home-care visits" }: { lim
           <ListCard
             eyebrow="Assigned work"
             title={title}
-            action={toSchedule ? <Badge tone="warning">{`${toSchedule} need a visit time`}</Badge> : undefined}
+            action={toSchedule ? <Badge tone="warning">{`${toSchedule} on this page need a visit time`}</Badge> : undefined}
           >
-            <div role="search" aria-label="Visit filters" className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <form onSubmit={submitSearch} role="search" aria-label="Visit filters" className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] md:items-end">
               <SearchInput
                 label="Search visits"
-                placeholder="Reference, care or location"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Care or location"
+                maxLength={120}
+                key={query.search}
+                name="search"
+                defaultValue={query.search}
               />
               <SelectField
                 label="Visit status"
                 hideLabel
-                value={stage}
-                onChange={(event) => setStage(event.target.value)}
-                options={[{ value: "", label: "Status: all" }, ...Object.entries(HOME_CARE_STAGE).map(([value, { label }]) => ({ value, label }))]}
+                value={query.status}
+                onChange={(event) => navigate({ ...query, status: event.target.value, page: 1 })}
+                options={[
+                  { value: "", label: "Status: all" },
+                  { value: "OPEN", label: "Open · scheduled or not" },
+                  { value: "IN_PROGRESS", label: "Visit in progress" },
+                  { value: "RESOLVED", label: "Completed" },
+                  { value: "CANCELLED", label: "Cancelled" },
+                ]}
               />
-            </div>
-            {requests.state === "error" ? (
-              <ErrorRow title="Your assigned visits could not be loaded" status={requests.status} onRetry={reloadRequests} />
+              <Button type="submit" variant="secondary">Search</Button>
+            </form>
+            {resource.state === "error" ? (
+              <ErrorRow title="Your assigned visits could not be loaded" status={resource.status} onRetry={reload} />
             ) : (
               <DataTable
                 caption={title}
@@ -146,21 +173,29 @@ export function VisitQueue({ limit, title = "Assigned home-care visits" }: { lim
                 rows={rows}
                 rowKey={(request) => request.id}
                 selectedKey={selectedId ?? undefined}
-                loading={requests.state === "loading"}
+                loading={resource.state === "loading"}
                 empty={{
-                  title: all.length ? "No visits match" : "No home-care requests are assigned to you",
-                  description: all.length ? undefined : "A MedNet administrator assigns patients' home-care requests to your account.",
+                  title: filtered ? "No visits match these filters" : "No home-care requests are assigned to you",
+                  description: filtered ? "Try different search words or clear the status filter." : "A MedNet administrator assigns patients' home-care requests to your account.",
                 }}
               />
             )}
-            {limit && filtered.length > limit ? (
-              <p className="text-caption text-text-secondary">{`Showing ${limit} of ${filtered.length}. All visits are under Visits.`}</p>
+            {!limit && resource.state === "ready" ? (
+              <Pagination
+                page={resource.data.number + 1}
+                totalPages={resource.data.totalPages}
+                onPageChange={(next) => navigate({ ...query, page: next })}
+                label="Visit queue pages"
+              />
+            ) : null}
+            {limit && resource.state === "ready" && resource.data.totalElements > limit ? (
+              <p className="text-caption text-text-secondary">{`Showing ${limit} of ${resource.data.totalElements}. All visits are under Visits.`}</p>
             ) : null}
           </ListCard>
         }
         record={
           selected ? (
-            <VisitDetail key={selected.id} request={selected} onNotice={setNotice} />
+            <VisitDetail key={selected.id} request={selected} onNotice={setNotice} onQueueChange={reload} />
           ) : (
             <NoRecordSelected>Open a request to see the care requested, where, and what you can do next.</NoRecordSelected>
           )
@@ -170,7 +205,15 @@ export function VisitQueue({ limit, title = "Assigned home-care visits" }: { lim
   );
 }
 
-function VisitDetail({ request, onNotice }: { request: HomeCareRequest; onNotice: (notice: Notice) => void }) {
+function VisitDetail({
+  request,
+  onNotice,
+  onQueueChange,
+}: {
+  request: HomeCareRequest;
+  onNotice: (notice: Notice) => void;
+  onQueueChange: () => void;
+}) {
   const { replaceRequest, reloadRequests } = useHomeCare();
   const [confirming, setConfirming] = useState<"start" | "complete" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -182,6 +225,7 @@ function VisitDetail({ request, onNotice }: { request: HomeCareRequest; onNotice
     try {
       const saved = next === "start" ? await homeCareApi.startVisit(request.id) : await homeCareApi.completeVisit(request.id);
       replaceRequest(saved);
+      onQueueChange();
       onNotice({
         tone: "success",
         text: next === "start" ? `${reference}: visit started. The patient was notified.` : `${reference}: visit completed. The patient was notified.`,
@@ -189,7 +233,10 @@ function VisitDetail({ request, onNotice }: { request: HomeCareRequest; onNotice
     } catch (error) {
       onNotice({ tone: "critical", text: actionError(error, "The visit could not be updated.") });
       // The request may have changed elsewhere (cancelled by the patient or an administrator).
-      if (error instanceof ApiRequestError && (error.status === 409 || error.status === 404)) reloadRequests();
+      if (error instanceof ApiRequestError && (error.status === 409 || error.status === 404)) {
+        reloadRequests();
+        onQueueChange();
+      }
     } finally {
       setBusy(false);
       setConfirming(null);
@@ -231,7 +278,7 @@ function VisitDetail({ request, onNotice }: { request: HomeCareRequest; onNotice
         />
         <StatusTimeline label={`Progress of ${reference}`} steps={homeCareTimeline(request, formatOperationsDateTime)} />
         {stage === "unscheduled" ? (
-          <ScheduleForm request={request} onNotice={onNotice} />
+          <ScheduleForm request={request} onNotice={onNotice} onQueueChange={onQueueChange} />
         ) : stage === "scheduled" ? (
           <p className="text-caption text-text-secondary">
             Start the visit when you arrive. The visit time cannot be changed in MedNet once set; if it must move, contact a MedNet administrator.
@@ -262,7 +309,15 @@ function VisitDetail({ request, onNotice }: { request: HomeCareRequest; onNotice
 }
 
 /** Sets the visit time once (`PATCH …/schedule`). The API requires a future time. */
-function ScheduleForm({ request, onNotice }: { request: HomeCareRequest; onNotice: (notice: Notice) => void }) {
+function ScheduleForm({
+  request,
+  onNotice,
+  onQueueChange,
+}: {
+  request: HomeCareRequest;
+  onNotice: (notice: Notice) => void;
+  onQueueChange: () => void;
+}) {
   const { replaceRequest, reloadRequests } = useHomeCare();
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
@@ -295,6 +350,7 @@ function ScheduleForm({ request, onNotice }: { request: HomeCareRequest; onNotic
     try {
       const saved = await homeCareApi.schedule(request.id, iso);
       replaceRequest(saved);
+      onQueueChange();
       onNotice({ tone: "success", text: `${reference}: visit scheduled for ${formatOperationsDateTime(saved.scheduledAt ?? iso)}. The patient was notified.` });
     } catch (caught) {
       const message = actionError(caught, "The visit could not be scheduled.");
@@ -303,6 +359,7 @@ function ScheduleForm({ request, onNotice }: { request: HomeCareRequest; onNotic
         // the explanation is shown above the queue instead.
         onNotice({ tone: "critical", text: message });
         reloadRequests();
+        onQueueChange();
       } else {
         setFailure(message);
       }

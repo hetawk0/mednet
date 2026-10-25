@@ -45,6 +45,14 @@ const id = encodeURIComponent;
 
 export const labApi = {
   requests: (signal?: AbortSignal) => apiRequest<LabRequest[]>("/partner/service-requests", { query: { type: "LABORATORY" }, signal }),
+  requestsPage: (
+    { status, search, page, size }: { status?: string; search?: string; page: number; size: number },
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<Page<LabRequest>>("/partner/service-requests", {
+      query: { type: "LABORATORY", status: status || undefined, search: search?.trim() || undefined, page, size },
+      signal,
+    }),
   /** OPEN → IN_PROGRESS is the only status change a laboratory may make. */
   startProcessing: (requestId: string) =>
     apiRequest<LabRequest>(`/partner/service-requests/${id(requestId)}/status`, { method: "PATCH", body: { status: "IN_PROGRESS" } }),

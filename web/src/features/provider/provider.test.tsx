@@ -3,7 +3,6 @@ import type { Appointment } from "@/features/patient/patient-api";
 import { applicationStatus } from "./application";
 import { availableActions, groupProviderAppointments, needsResponse } from "./appointments";
 import { todaysSchedule } from "./overview";
-import { patientsFromAppointments } from "./patients";
 import { doctorGreeting } from "./provider-workspace";
 import { liberiaInstant } from "./schedule";
 
@@ -77,25 +76,6 @@ describe("provider appointment state", () => {
     expect(today.map((a) => a.id)).toEqual(["morning", "afternoon", "cancelled"]);
     expect(active.map((a) => a.id)).toEqual(["morning", "afternoon"]);
     expect(remaining.map((a) => a.id)).toEqual(["afternoon"]);
-  });
-});
-
-describe("patients from appointments", () => {
-  it("lists each patient once, with care relationship only for confirmed/completed/rescheduling", () => {
-    const patients = patientsFromAppointments(
-      [
-        appt("1", "COMPLETED", "2026-10-01T09:00:00Z", { patientAccountId: "a", patientName: "Ama Doe" }),
-        appt("2", "CONFIRMED", "2026-10-20T09:00:00Z", { patientAccountId: "a", patientName: "Ama Doe" }),
-        appt("3", "PENDING", "2026-10-21T09:00:00Z", { patientAccountId: "b", patientName: "Ben Kollie" }),
-        appt("4", "DECLINED", "2026-10-02T09:00:00Z", { patientAccountId: "c", patientName: "Cee Tarr" }),
-      ],
-      now,
-    );
-    expect(patients.map((p) => [p.name, p.careRelationship, p.next?.id ?? null, p.last?.id ?? null])).toEqual([
-      ["Ama Doe", true, "2", "1"],
-      ["Ben Kollie", false, "3", null],
-      ["Cee Tarr", false, null, "4"],
-    ]);
   });
 });
 

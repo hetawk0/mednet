@@ -14,11 +14,13 @@ import { actionError, useResource } from "./use-resource";
 
 export type ThreadMessage = { id: string; senderAccountId: string; body: string; createdAt: string };
 
+type ThreadData = { messages: ThreadMessage[]; nextOlderPage: number | null };
+
 const PAGE_SIZE = 100;
 
 /**
  * One message thread (secure messages or a text consultation), shared by the patient and doctor
- * workspaces. Oldest first from the API, so the newest page is shown. Not real time: Refresh reloads.
+ * workspaces. The newest page is shown first; older pages load on request. Not real time: Refresh reloads.
  */
 export function MessageThread({
   threadKey,
@@ -56,19 +58,84 @@ export function MessageThread({
 }) {
   const { resource, reload, replace } = useResource(async (signal) => {
     const first = await loadPage(0, PAGE_SIZE, signal);
-    if (first.totalPages <= 1) return { messages: first.content, earlierHidden: false };
+    if (first.totalPages <= 1) return { messages: first.content, nextOlderPage: null };
     const last = await loadPage(first.totalPages - 1, PAGE_SIZE, signal);
-    return { messages: last.content, earlierHidden: true };
+    return { messages: last.content, nextOlderPage: last.number - 1 };
   }, threadKey);
   const [body, setBody] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [earlierError, setEarlierError] = useState("");
   const endRef = useRef<HTMLLIElement>(null);
+  const requestIdRef = useRef(0);
+  const earlierRequestRef = useRef<AbortController | null>(null);
+  const latestDataRef = useRef<ThreadData | null>(null);
+  const preserveScrollRef = useRef(false);
   const count = resource.state === "ready" ? resource.data.messages.length : 0;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "nearest" });
+    if (resource.state === "ready") latestDataRef.current = resource.data;
+  }, [resource]);
+
+  useEffect(() => {
+    if (!preserveScrollRef.current) endRef.current?.scrollIntoView?.({ block: "nearest" });
+    preserveScrollRef.current = false;
   }, [count]);
+
+  useEffect(
+    () => () => {
+      requestIdRef.current += 1;
+      earlierRequestRef.current?.abort();
+      latestDataRef.current = null;
+    },
+    [threadKey],
+  );
+
+  function refresh() {
+    requestIdRef.current += 1;
+    earlierRequestRef.current?.abort();
+    earlierRequestRef.current = null;
+    setLoadingEarlier(false);
+    setEarlierError("");
+    reload();
+  }
+
+  async function loadEarlier() {
+    if (resource.state !== "ready" || resource.data.nextOlderPage === null || loadingEarlier) return;
+    const page = resource.data.nextOlderPage;
+    const requestId = ++requestIdRef.current;
+    const controller = new AbortController();
+    earlierRequestRef.current = controller;
+    setLoadingEarlier(true);
+    setEarlierError("");
+    try {
+      const result = await loadPage(page, PAGE_SIZE, controller.signal);
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+      const current = latestDataRef.current ?? resource.data;
+      const seen = new Set(current.messages.map((message) => message.id));
+      const olderMessages = result.content.filter((message) => {
+        if (seen.has(message.id)) return false;
+        seen.add(message.id);
+        return true;
+      });
+      const updated = {
+        messages: [...olderMessages, ...current.messages],
+        nextOlderPage: page > 0 ? page - 1 : null,
+      };
+      preserveScrollRef.current = updated.messages.length > current.messages.length;
+      latestDataRef.current = updated;
+      replace(updated);
+    } catch (failure) {
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+      setEarlierError(actionError(failure, "Earlier messages could not be loaded."));
+    } finally {
+      if (requestId === requestIdRef.current) {
+        earlierRequestRef.current = null;
+        setLoadingEarlier(false);
+      }
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -79,8 +146,12 @@ export function MessageThread({
     try {
       const sent = await send(text);
       setBody("");
-      if (resource.state === "ready") replace({ ...resource.data, messages: [...resource.data.messages, sent] });
-      else reload();
+      const current = latestDataRef.current;
+      if (current) {
+        const updated = { ...current, messages: [...current.messages, sent] };
+        latestDataRef.current = updated;
+        replace(updated);
+      } else reload();
     } catch (failure) {
       setError(actionError(failure, "Your message could not be sent."));
     } finally {
@@ -96,7 +167,7 @@ export function MessageThread({
         action={
           <div className="flex flex-wrap items-center gap-2">
             {headerExtra}
-            <Button variant="tertiary" size="sm" leadingIcon={<RefreshCw aria-hidden size={16} />} onClick={reload}>
+            <Button variant="tertiary" size="sm" leadingIcon={<RefreshCw aria-hidden size={16} />} onClick={refresh}>
               Refresh
             </Button>
           </div>
@@ -113,8 +184,19 @@ export function MessageThread({
           )
         ) : resource.data.messages.length ? (
           <>
-            {resource.data.earlierHidden ? (
-              <p className="mb-3 text-caption text-text-secondary">Showing the latest messages. Earlier messages are not shown.</p>
+            {resource.data.nextOlderPage !== null ? (
+              <div className="mb-3 flex flex-col items-start gap-2">
+                {earlierError ? <p role="alert" className="text-caption text-critical">{earlierError}</p> : null}
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  loading={loadingEarlier}
+                  disabled={loadingEarlier}
+                  onClick={loadEarlier}
+                >
+                  {earlierError ? "Retry loading earlier messages" : "Load earlier messages"}
+                </Button>
+              </div>
             ) : null}
             <ol aria-label={listLabel} className="flex max-h-[32rem] flex-col gap-3 overflow-y-auto pr-1">
               {resource.data.messages.map((message) => {

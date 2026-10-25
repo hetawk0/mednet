@@ -9,6 +9,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog, Drawer } from "@/components/ui/dialog";
 import { DescriptionList } from "@/components/ui/lists";
+import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StateMessage } from "@/components/ui/state-message";
 import { Tabs } from "@/components/ui/tabs";
@@ -68,7 +69,8 @@ export function PatientAppointments({ tab, selectedId }: { tab: string; selected
 }
 
 function AppointmentList({ selectedId }: { selectedId?: string }) {
-  const { resource, reload, replace } = useResource((signal) => patientApi.appointments(0, 100, signal));
+  const [page, setPage] = useState(0);
+  const { resource, reload, replace } = useResource((signal) => patientApi.appointments(page, 25, signal), String(page));
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "critical"; text: string } | null>(null);
@@ -154,7 +156,7 @@ function AppointmentList({ selectedId }: { selectedId?: string }) {
           <StateMessage
             kind="empty"
             className="mt-4"
-            title="No upcoming appointments"
+            title={resource.data.totalElements > 0 ? "No upcoming appointments on this page" : "No upcoming appointments"}
             description="Find an approved doctor and request one of their open times."
             action={<ButtonLink href="/patient/find-a-doctor">Find a doctor</ButtonLink>}
           />
@@ -170,14 +172,28 @@ function AppointmentList({ selectedId }: { selectedId?: string }) {
             ))}
           </ul>
         ) : (
-          <StateMessage kind="empty" layout="inline" className="mt-4" title="No earlier visits." />
+          <StateMessage
+            kind="empty"
+            layout="inline"
+            className="mt-4"
+            title={resource.data.totalElements > 0 ? "No earlier visits on this page." : "No earlier visits."}
+          />
         )}
-        {resource.data.totalElements > resource.data.content.length ? (
-          <p className="mt-4 text-caption text-text-secondary">
-            Showing your {resource.data.content.length} most recent requests of {resource.data.totalElements}.
-          </p>
-        ) : null}
       </Card>
+
+      {resource.data.totalPages > 1 ? (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <p className="text-caption text-text-secondary" aria-live="polite">
+            Showing appointments {page * resource.data.size + 1}–{page * resource.data.size + resource.data.content.length} of {resource.data.totalElements}.
+          </p>
+          <Pagination
+            page={page + 1}
+            totalPages={resource.data.totalPages}
+            onPageChange={(nextPage) => setPage(nextPage - 1)}
+            label="Appointment history pages"
+          />
+        </div>
+      ) : null}
 
       {detailId ? (
         <AppointmentDetails

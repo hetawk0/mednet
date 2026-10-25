@@ -2038,6 +2038,147 @@ class MedNetApplicationTests {
     }
 
     @Test
+    void appointmentHistoriesAndProviderPatientDirectoryPageAllScopedResults() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        ProviderApplicationEntity provider = approvedProvider("Dr. History " + suffix, "General medicine");
+        ProviderApplicationEntity otherProvider = approvedProvider("Dr. Other History " + suffix, "General medicine");
+        java.util.List<PlatformAccountEntity> carePatients = new java.util.ArrayList<>();
+        java.util.Set<String> allAppointmentIds = new java.util.HashSet<>();
+        Instant startsAt = Instant.now().plusSeconds(86_400).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+
+        for (int index = 0; index < 101; index++) {
+            carePatients.add(carePatient(provider, String.format("History patient %03d %s", index, suffix), false));
+        }
+
+        PlatformAccountEntity firstPatient = carePatients.get(0);
+        for (int index = 0; index < 100; index++) {
+            ProviderAvailabilitySlotEntity slot = availabilitySlots.saveAndFlush(new ProviderAvailabilitySlotEntity(
+                    UUID.randomUUID().toString(),
+                    provider.getId(),
+                    startsAt.plusSeconds(index * 3600L),
+                    startsAt.plusSeconds(index * 3600L + 1800)));
+            AppointmentEntity appointment = appointments.saveAndFlush(new AppointmentEntity(
+                    UUID.randomUUID().toString(), firstPatient.getId(), provider.getId(), slot.getId()));
+            allAppointmentIds.add(appointment.getId());
+        }
+
+        PlatformAccountEntity unrelatedPatient = carePatient(
+                otherProvider, "Unrelated patient " + suffix, false);
+        PlatformAccountEntity suspendedPatient = carePatient(
+                provider, "Suspended patient " + suffix, false);
+        suspendedPatient.changeStatus("SUSPENDED");
+        accounts.saveAndFlush(suspendedPatient);
+        PlatformAccountEntity requestOnly = verifiedAccount("request-only-" + suffix + "@mednet.test", "PATIENT");
+        patientProfiles.saveAndFlush(new PatientProfileEntity(
+                UUID.randomUUID().toString(), requestOnly.getId(), "Request only " + suffix,
+                LocalDate.of(1990, 1, 1), "+231770000000", "Monrovia"));
+        ProviderAvailabilitySlotEntity requestSlot = availabilitySlots.saveAndFlush(new ProviderAvailabilitySlotEntity(
+                UUID.randomUUID().toString(), provider.getId(), startsAt.plusSeconds(500_000), startsAt.plusSeconds(501_800)));
+        appointments.saveAndFlush(new AppointmentEntity(
+                UUID.randomUUID().toString(), requestOnly.getId(), provider.getId(), requestSlot.getId()));
+
+        var patientPage0 = mockMvc.perform(get("/api/v1/appointments").param("page", "0").param("size", "100")
+                        .with(user(firstPatient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(101))
+                .andExpect(jsonPath("$.content.length()").value(100))
+                .andReturn();
+        var patientPage1 = mockMvc.perform(get("/api/v1/appointments").param("page", "1").param("size", "100")
+                        .with(user(firstPatient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andReturn();
+        var patientIds = new java.util.HashSet<String>();
+        for (var result : java.util.List.of(patientPage0, patientPage1)) {
+            var contentRows = objectMapper.readTree(result.getResponse().getContentAsString()).get("content");
+            contentRows.forEach(row -> patientIds.add(row.get("id").asText()));
+        }
+        assertThat(patientIds).hasSize(101);
+
+        var providerPage0 = mockMvc.perform(get("/api/v1/appointments").param("page", "0").param("size", "100")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(203))
+                .andExpect(jsonPath("$.content.length()").value(100))
+                .andReturn();
+        var providerPage1 = mockMvc.perform(get("/api/v1/appointments").param("page", "1").param("size", "100")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(100))
+                .andReturn();
+        var providerPage2 = mockMvc.perform(get("/api/v1/appointments").param("page", "2").param("size", "100")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content.length()").value(3))
+                .andReturn();
+        for (var result : java.util.List.of(providerPage0, providerPage1, providerPage2)) {
+            var contentRows = objectMapper.readTree(result.getResponse().getContentAsString()).get("content");
+            contentRows.forEach(row -> allAppointmentIds.add(row.get("id").asText()));
+        }
+        assertThat(allAppointmentIds).hasSize(203);
+
+        var directoryPage0 = mockMvc.perform(get("/api/v1/providers/me/patients").param("page", "0").param("size", "100")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(101))
+                .andExpect(jsonPath("$.content.length()").value(100))
+                .andExpect(jsonPath("$.content[0].name").value("History patient 000 " + suffix))
+                .andExpect(jsonPath("$.content[0].patientAccountId").exists())
+                .andExpect(jsonPath("$.content[0].email").doesNotExist())
+                .andReturn();
+        var directoryPage1 = mockMvc.perform(get("/api/v1/providers/me/patients").param("page", "1").param("size", "100")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andReturn();
+        var directoryIds = new java.util.HashSet<String>();
+        for (var result : java.util.List.of(directoryPage0, directoryPage1)) {
+            var contentRows = objectMapper.readTree(result.getResponse().getContentAsString()).get("content");
+            contentRows.forEach(row -> directoryIds.add(row.get("patientAccountId").asText()));
+        }
+        assertThat(directoryIds).hasSize(101)
+                .containsAll(carePatients.stream().map(PlatformAccountEntity::getId).toList())
+                .doesNotContain(unrelatedPatient.getId(), suspendedPatient.getId(), requestOnly.getId());
+
+        mockMvc.perform(get("/api/v1/providers/me/patients/{id}", firstPatient.getId())
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.patientAccountId").value(firstPatient.getId()));
+        mockMvc.perform(get("/api/v1/providers/me/patients/{id}", unrelatedPatient.getId())
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/providers/me/patients/{id}/appointments", unrelatedPatient.getId())
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/providers/me/patients/{id}", suspendedPatient.getId())
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/providers/me/patients/{id}/appointments", suspendedPatient.getId())
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/providers/me/patients/{id}/appointments", firstPatient.getId())
+                        .param("page", "0").param("size", "100")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(101))
+                .andExpect(jsonPath("$.content.length()").value(100));
+        mockMvc.perform(get("/api/v1/providers/me/patients/{id}/appointments", firstPatient.getId())
+                        .param("page", "1").param("size", "100")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1));
+        mockMvc.perform(get("/api/v1/providers/me/patients").param("page", "-1")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/providers/me/patients").param("size", "101")
+                        .with(user(provider.getEmail()).roles("PROVIDER")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/providers/me/patients")
+                        .with(user(firstPatient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void administratorListsCanBePagedWithoutLosingRowsAndStayAdministratorOnly() throws Exception {
         for (int i = 0; i < 3; i++) {
             auditEvents.saveAndFlush(new com.mednet.admin.data.AdminAuditEventEntity(

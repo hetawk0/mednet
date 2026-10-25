@@ -108,6 +108,21 @@ public class AppointmentService {
                 .map(this::details);
     }
 
+    @Transactional(readOnly = true)
+    public Page<AppointmentDetails> listProviderPatient(
+            String actorEmail, String patientAccountId, int page, int size) {
+        ProviderApplicationEntity provider = approvedProvider(actorEmail);
+        careAccess.requirePatientById(patientAccountId);
+        careAccess.requireCareRelationship(patientAccountId, provider.getId());
+        var pageable = Pagination.pageRequest(
+                page,
+                size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
+        return appointments.findByProviderApplicationIdAndPatientAccountId(
+                        provider.getId(), patientAccountId, pageable)
+                .map(this::details);
+    }
+
     @Transactional
     public Page<AdminAppointmentSummary> adminList(String actorEmail, int page, int size) {
         Page<AdminAppointmentSummary> result = appointments

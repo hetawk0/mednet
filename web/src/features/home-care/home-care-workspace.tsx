@@ -13,8 +13,8 @@ import { homePathForRole } from "@/features/workspace/workspaces";
 import { homeCareApi, type HomeCareRequest } from "./home-care-api";
 
 /**
- * Home-care workspace frame (Phase 5C): session guard (HOME_CARE only), the assigned-request list shared
- * by every view, and WorkspaceShell. The API decides which requests this account may see or change.
+ * Home-care workspace frame (Phase 5C): session guard (HOME_CARE only), overview counts and WorkspaceShell.
+ * Queue pages load their own server-filtered page; the API decides which requests this account may see or change.
  * Request data lives only in React state; nothing is written to browser storage.
  */
 type HomeCareContextValue = {
@@ -118,14 +118,27 @@ export function HomeCareWorkspace({ children }: { children: ReactNode }) {
           </Alert>
         ) : null}
         {/* Mounted only for a HOME_CARE session, so no request is fetched for anyone else. */}
-        <HomeCareData session={access.session}>{children}</HomeCareData>
+        <HomeCareData session={access.session} loadOverviewRequests={pathname === "/home-care"}>
+          {children}
+        </HomeCareData>
       </div>
     </WorkspaceShell>
   );
 }
 
-function HomeCareData({ session, children }: { session: Session; children: ReactNode }) {
-  const { resource, reload, replace } = useResource((signal) => homeCareApi.requests(signal), "home-care-requests");
+function HomeCareData({
+  session,
+  children,
+  loadOverviewRequests,
+}: {
+  session: Session;
+  children: ReactNode;
+  loadOverviewRequests: boolean;
+}) {
+  const { resource, reload, replace } = useResource(
+    (signal) => loadOverviewRequests ? homeCareApi.requests(signal) : Promise.resolve([]),
+    `home-care-requests-${loadOverviewRequests}`,
+  );
   const replaceRequest = useCallback(
     (request: HomeCareRequest) => {
       if (resource.state === "ready") replace(resource.data.map((row) => (row.id === request.id ? request : row)));

@@ -13,8 +13,8 @@ import { homePathForRole } from "@/features/workspace/workspaces";
 import { labApi, type LabRequest, type LatestResult, type SubmittedResult } from "./lab-api";
 
 /**
- * Laboratory workspace frame: session guard (LABORATORY only), the assigned-request queue shared by
- * every view, and WorkspaceShell. The API decides which requests this account may see or change.
+ * Laboratory workspace frame: session guard (LABORATORY only), overview/result lookup data and WorkspaceShell.
+ * The order queue loads its own server-filtered page; the API decides which requests this account may see or change.
  *
  * Each order arrives with its latest result's review state (`latestResult`, Phase 5D), so the queue shows
  * whether a result awaits doctor review, was returned or was released without loading the result list.
@@ -124,14 +124,30 @@ export function LaboratoryWorkspace({ children }: { children: ReactNode }) {
           </Alert>
         ) : null}
         {/* Mounted only for a LABORATORY session, so no request is fetched for anyone else. */}
-        <LaboratoryData session={access.session}>{children}</LaboratoryData>
+        <LaboratoryData
+          session={access.session}
+          loadRequestList={pathname === "/laboratory" || pathname === "/laboratory/results"}
+        >
+          {children}
+        </LaboratoryData>
       </div>
     </WorkspaceShell>
   );
 }
 
-function LaboratoryData({ session, children }: { session: Session; children: ReactNode }) {
-  const { resource, reload, replace } = useResource((signal) => labApi.requests(signal), "lab-requests");
+function LaboratoryData({
+  session,
+  children,
+  loadRequestList,
+}: {
+  session: Session;
+  children: ReactNode;
+  loadRequestList: boolean;
+}) {
+  const { resource, reload, replace } = useResource(
+    (signal) => loadRequestList ? labApi.requests(signal) : Promise.resolve([]),
+    `lab-requests-${loadRequestList}`,
+  );
 
   const replaceRequest = useCallback(
     (request: LabRequest) => {

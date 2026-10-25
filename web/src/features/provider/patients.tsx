@@ -21,58 +21,27 @@ import type { Appointment, ClinicalRecord, LabResult } from "@/features/patient/
 import { CountBadge, PrivacyCard, ViewBand, ViewColumns } from "@/features/patient/view-frame";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { actionError, useResource } from "@/features/workspace/use-resource";
-import { PROVIDER_LIMITS, RECORD_CATEGORIES, providerApi, type RecordCategory } from "./provider-api";
+import { LIST_PAGE_SIZE } from "@/features/workspace/paging";
+import { PROVIDER_LIMITS, RECORD_CATEGORIES, providerApi, type ProviderPatientSummary, type RecordCategory } from "./provider-api";
 import type { PatientTab } from "./tabs";
 
-/** Statuses that make a care relationship in `PatientCareAccess` (records still also need consent). */
-export const CARE_STATUSES = ["CONFIRMED", "COMPLETED", "RESCHEDULE_REQUESTED"];
-
-export type ProviderPatient = {
-  patientAccountId: string;
-  name: string;
-  careRelationship: boolean;
-  appointments: Appointment[];
-  next?: Appointment;
-  last?: Appointment;
-};
-
-/** One entry per patient from the provider's own appointments (the only patient list the API offers). */
-export function patientsFromAppointments(appointments: Appointment[], now = new Date()): ProviderPatient[] {
-  const byPatient = new Map<string, Appointment[]>();
-  for (const appointment of appointments) {
-    byPatient.set(appointment.patientAccountId, [...(byPatient.get(appointment.patientAccountId) ?? []), appointment]);
-  }
-  return [...byPatient.entries()]
-    .map(([patientAccountId, list]) => {
-      const sorted = [...list].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-      return {
-        patientAccountId,
-        name: sorted.at(-1)!.patientName,
-        careRelationship: list.some((a) => CARE_STATUSES.includes(a.status)),
-        appointments: sorted,
-        next: sorted.find((a) => ["PENDING", "CONFIRMED", "RESCHEDULE_REQUESTED"].includes(a.status) && new Date(a.endsAt) > now),
-        last: [...sorted].reverse().find((a) => new Date(a.startsAt) <= now),
-      };
-    })
-    .sort((a, b) => Number(b.careRelationship) - Number(a.careRelationship) || a.name.localeCompare(b.name));
-}
-
 export function ProviderPatients() {
-  const { resource, reload } = useResource((signal) => providerApi.appointments(0, 100, signal));
-  const patients = resource.state === "ready" ? patientsFromAppointments(resource.data.content) : [];
+  const [page, setPage] = useState(0);
+  const { resource, reload } = useResource((signal) => providerApi.patients(page, LIST_PAGE_SIZE, signal), String(page));
+  const patients = resource.state === "ready" ? resource.data.content : [];
   return (
     <>
-      <ViewBand eyebrow="Doctor workspace" title="Patients" description="Patients who have requested or booked an appointment with you." />
+      <ViewBand eyebrow="Doctor workspace" title="Patients" description="Patients with an eligible care relationship with you." />
       <ViewColumns
         aside={
           <PrivacyCard>
-            You can open a patient’s records only while you have a confirmed or completed appointment with them and they have
-            allowed you access. MedNet checks this on every request.
+            You can open a patient’s records only while an eligible care relationship is active and they have allowed you
+            access. MedNet checks this on every request.
           </PrivacyCard>
         }
       >
         <Card>
-          <CardHeader eyebrow="Current view" title="Your patients" action={resource.state === "ready" ? <CountBadge count={patients.length} noun="patient" /> : undefined} />
+          <CardHeader eyebrow="Current view" title="Your patients" action={resource.state === "ready" ? <CountBadge count={resource.data.totalElements} noun="patient" /> : undefined} />
           <div className="mt-4 border-t border-border">
             {resource.state === "loading" ? (
               <LoadingRows label="Loading patients" />
@@ -86,30 +55,33 @@ export function ProviderPatients() {
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-ink [overflow-wrap:anywhere]">{patient.name}</p>
                       <p className="text-caption text-text-secondary">
-                        {patient.next
-                          ? `Next: ${formatWhen(patient.next.startsAt)}`
-                          : patient.last
-                            ? `Last: ${formatDate(patient.last.startsAt)}`
-                            : "No appointments yet"}
+                        Eligible care relationship with you
                       </p>
                     </div>
-                    <Badge tone={patient.careRelationship ? "success" : "neutral"}>
-                      {patient.careRelationship ? "Care relationship" : "Request only"}
-                    </Badge>
-                    {patient.careRelationship ? (
-                      <ButtonLink href={`/provider/patients/${encodeURIComponent(patient.patientAccountId)}`} size="sm" variant="secondary" aria-label={`Open ${patient.name}`}>
-                        Open patient
-                      </ButtonLink>
-                    ) : (
-                      <span className="text-caption text-text-secondary">Opens after you confirm</span>
-                    )}
+                    <Badge tone="success">Care relationship</Badge>
+                    <ButtonLink href={`/provider/patients/${encodeURIComponent(patient.patientAccountId)}`} size="sm" variant="secondary" aria-label={`Open ${patient.name}`}>
+                      Open patient
+                    </ButtonLink>
                   </li>
                 ))}
               </ul>
             ) : (
-              <StateMessage kind="empty" className="mt-4" title="No patients yet" description="Patients appear here when they request one of your open times." />
+              <StateMessage kind="empty" className="mt-4" title="No patients yet" description="Patients appear here after a confirmed, completed or rescheduling appointment." />
             )}
           </div>
+          {resource.state === "ready" && resource.data.totalPages > 1 ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+              <p className="text-caption text-text-secondary" aria-live="polite">
+                Showing patients {page * resource.data.size + 1}–{page * resource.data.size + patients.length} of {resource.data.totalElements}.
+              </p>
+              <Pagination
+                page={page + 1}
+                totalPages={resource.data.totalPages}
+                onPageChange={(nextPage) => setPage(nextPage - 1)}
+                label="Patient directory pages"
+              />
+            </div>
+          ) : null}
         </Card>
       </ViewColumns>
     </>
@@ -123,27 +95,24 @@ export function ProviderPatients() {
  */
 export function ProviderPatientDetail({ patientAccountId, tab }: { patientAccountId: string; tab: PatientTab }) {
   const router = useRouter();
-  const appointments = useResource((signal) => providerApi.appointments(0, 100, signal));
-  const patient =
-    appointments.resource.state === "ready"
-      ? patientsFromAppointments(appointments.resource.data.content).find((p) => p.patientAccountId === patientAccountId)
-      : undefined;
+  const patientResource = useResource((signal) => providerApi.patient(patientAccountId, signal), patientAccountId);
   const base = `/provider/patients/${encodeURIComponent(patientAccountId)}`;
 
-  if (appointments.resource.state === "loading") return <LoadingRows label="Loading the patient" />;
-  if (appointments.resource.state === "error") {
-    return <ErrorRow title="The patient could not be loaded." onRetry={appointments.reload} status={appointments.resource.status} />;
+  if (patientResource.resource.state === "loading") return <LoadingRows label="Loading the patient" />;
+  if (patientResource.resource.state === "error") {
+    if (patientResource.resource.status === 404 || patientResource.resource.status === 403) {
+      return (
+        <StateMessage
+          kind="denied"
+          title="Patient not found"
+          description="You can open only patients with an eligible care relationship with you."
+          action={<ButtonLink href="/provider/patients" variant="secondary">Back to patients</ButtonLink>}
+        />
+      );
+    }
+    return <ErrorRow title="The patient could not be loaded." onRetry={patientResource.reload} status={patientResource.resource.status} />;
   }
-  if (!patient) {
-    return (
-      <StateMessage
-        kind="denied"
-        title="Patient not found"
-        description="You can open only patients who have an appointment with you."
-        action={<ButtonLink href="/provider/patients" variant="secondary">Back to patients</ButtonLink>}
-      />
-    );
-  }
+  const patient: ProviderPatientSummary = patientResource.resource.data;
 
   return (
     <>
@@ -155,11 +124,9 @@ export function ProviderPatientDetail({ patientAccountId, tab }: { patientAccoun
           <Avatar name={patient.name} size="lg" />
           <div className="min-w-0 flex-1">
             <h2 className="text-title text-ink [overflow-wrap:anywhere]">{patient.name}</h2>
-            <p className="text-caption text-text-secondary">
-              {patient.next ? `Next appointment ${formatWhen(patient.next.startsAt)}` : "No upcoming appointment"}
-            </p>
+            <p className="text-caption text-text-secondary">Eligible care relationship with you</p>
           </div>
-          <Badge tone={patient.careRelationship ? "success" : "neutral"}>{patient.careRelationship ? "Care relationship" : "Request only"}</Badge>
+          <Badge tone="success">Care relationship</Badge>
         </div>
       </Card>
       <ViewColumns
@@ -183,28 +150,65 @@ export function ProviderPatientDetail({ patientAccountId, tab }: { patientAccoun
               label: "Appointments",
               content:
                 tab === "appointments" ? (
-                  <Card>
-                    <CardHeader eyebrow="With you" title="Appointments" action={<CountBadge count={patient.appointments.length} />} />
-                    <ul className="mt-4 divide-y divide-line-soft border-t border-border">
-                      {[...patient.appointments].reverse().map((appointment) => (
-                        <li key={appointment.id} className="flex flex-wrap items-center gap-3 py-3">
-                          <span className="min-w-0 flex-1 text-data text-ink">
-                            {formatWhen(appointment.startsAt)} · {consultationModeLabel(appointment.consultationMode)}
-                          </span>
-                          <AppointmentStatusBadge status={appointment.status} />
-                          <ButtonLink href={`/provider/appointments?tab=history&appointment=${encodeURIComponent(appointment.id)}`} size="sm" variant="tertiary">
-                            Details
-                          </ButtonLink>
-                        </li>
-                      ))}
-                    </ul>
-                  </Card>
-                ) : null,
+                    <PatientAppointments patientAccountId={patientAccountId} />
+                  ) : null,
             },
           ]}
         />
       </ViewColumns>
     </>
+  );
+}
+
+function PatientAppointments({ patientAccountId }: { patientAccountId: string }) {
+  const [page, setPage] = useState(0);
+  const { resource, reload } = useResource(
+    (signal) => providerApi.patientAppointments(patientAccountId, page, LIST_PAGE_SIZE, signal),
+    `${patientAccountId}:${page}`,
+  );
+
+  return (
+    <Card>
+      <CardHeader
+        eyebrow="With you"
+        title="Appointments"
+        action={resource.state === "ready" ? <CountBadge count={resource.data.totalElements} /> : undefined}
+      />
+      {resource.state === "loading" ? (
+        <LoadingRows label="Loading appointments" />
+      ) : resource.state === "error" ? (
+        <ErrorRow title="Appointments could not be loaded." onRetry={reload} status={resource.status} />
+      ) : resource.data.content.length ? (
+        <ul aria-label="Patient appointments" className="mt-4 divide-y divide-line-soft border-t border-border">
+          {resource.data.content.map((appointment: Appointment) => (
+            <li key={appointment.id} className="flex flex-wrap items-center gap-3 py-3">
+              <span className="min-w-0 flex-1 text-data text-ink">
+                {formatWhen(appointment.startsAt)} · {consultationModeLabel(appointment.consultationMode)}
+              </span>
+              <AppointmentStatusBadge status={appointment.status} />
+              <ButtonLink href={`/provider/appointments?tab=history&appointment=${encodeURIComponent(appointment.id)}`} size="sm" variant="tertiary">
+                Details
+              </ButtonLink>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <StateMessage kind="empty" layout="inline" className="mt-4" title="No appointments with this patient." />
+      )}
+      {resource.state === "ready" && resource.data.totalPages > 1 ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+          <p className="text-caption text-text-secondary" aria-live="polite">
+            Showing appointments {page * resource.data.size + 1}–{page * resource.data.size + resource.data.content.length} of {resource.data.totalElements}.
+          </p>
+          <Pagination
+            page={page + 1}
+            totalPages={resource.data.totalPages}
+            onPageChange={(nextPage) => setPage(nextPage - 1)}
+            label="Patient appointment pages"
+          />
+        </div>
+      ) : null}
+    </Card>
   );
 }
 

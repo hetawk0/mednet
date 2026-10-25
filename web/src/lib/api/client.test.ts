@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { patientApi } from "@/features/patient/patient-api";
+import { providerApi } from "@/features/provider/provider-api";
 import { apiRequest, buildApiUrl } from "./client";
 import { ApiRequestError } from "./errors";
 import { getSession } from "./session";
@@ -32,6 +34,28 @@ describe("buildApiUrl", () => {
 });
 
 describe("apiRequest", () => {
+  it("keeps patient and provider message pagination on the authenticated same-origin API", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(200, { content: [], totalElements: 0, totalPages: 0, number: 0, size: 100 }))
+      .mockResolvedValueOnce(json(200, { content: [], totalElements: 0, totalPages: 0, number: 2, size: 100 }));
+    const patientSignal = new AbortController().signal;
+    const providerSignal = new AbortController().signal;
+
+    await patientApi.messages("conversation/one", 1, 100, patientSignal);
+    await providerApi.messages("conversation/two", 2, 100, providerSignal);
+
+    expect(fetchMock.mock.calls).toEqual([
+      [
+        "/api/v1/conversations/conversation%2Fone/messages?page=1&size=100",
+        expect.objectContaining({ method: "GET", credentials: "same-origin", signal: patientSignal }),
+      ],
+      [
+        "/api/v1/conversations/conversation%2Ftwo/messages?page=2&size=100",
+        expect.objectContaining({ method: "GET", credentials: "same-origin", signal: providerSignal }),
+      ],
+    ]);
+  });
+
   it("sends GET with the session cookie and no CSRF round trip", async () => {
     fetchMock.mockResolvedValueOnce(json(200, { items: [] }));
 
