@@ -43,6 +43,15 @@ public class PatientRecordController {
         return service.consents(actor.getName());
     }
 
+    @GetMapping(value = "/me/record-consents", params = "page")
+    @PreAuthorize("hasRole('PATIENT')")
+    public Page<RecordConsent> consentsPage(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication actor) {
+        return service.pageConsents(actor.getName(), page, size);
+    }
+
     @PostMapping("/me/record-consents")
     @PreAuthorize("hasRole('PATIENT')")
     public RecordConsent grantConsent(

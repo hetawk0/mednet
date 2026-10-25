@@ -48,6 +48,8 @@ import com.mednet.appointment.data.AppointmentEntity;
 import com.mednet.record.data.ClinicalRecordRepository;
 import com.mednet.record.data.PatientProviderRecordConsentRepository;
 import com.mednet.record.data.PatientProviderRecordConsentEntity;
+import com.mednet.message.data.ConversationEntity;
+import com.mednet.message.data.ConversationRepository;
 import com.mednet.laboratory.data.LaboratoryResultEntity;
 import com.mednet.laboratory.data.LaboratoryResultRepository;
 import com.mednet.service.data.PatientServiceRequestEntity;
@@ -147,6 +149,8 @@ class MedNetApplicationTests {
 
     @Autowired
     private PatientProviderRecordConsentRepository recordConsents;
+    @Autowired
+    private ConversationRepository conversations;
 
     @Autowired
     private MedicationScheduleRepository medicationSchedules;
@@ -762,6 +766,61 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api/v1/patients/me/medications/{id}/dose-logs", schedule.getId())
                         .param("page", "0")
                         .param("size", "101")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void conversationAndConsentHistoriesSupportOptionalValidatedPagination() throws Exception {
+        PlatformAccountEntity patient = verifiedAccount(
+                "conversation-pagination-" + UUID.randomUUID() + "@mednet.test", "PATIENT");
+        java.util.List<ProviderApplicationEntity> providers = java.util.stream.IntStream.range(0, 3)
+                .mapToObj(index -> approvedProvider("Dr Paging " + index, "General medicine"))
+                .toList();
+        for (ProviderApplicationEntity provider : providers) {
+            confirmedAppointment(provider, patient, Instant.now().plusSeconds(86_400));
+            conversations.save(new ConversationEntity(
+                    UUID.randomUUID().toString(), patient.getId(), provider.getId()));
+            recordConsents.save(new PatientProviderRecordConsentEntity(
+                    UUID.randomUUID().toString(), patient.getId(), provider.getId()));
+        }
+        ProviderApplicationEntity unrelatedProvider = approvedProvider("Dr Unrelated", "General medicine");
+        conversations.saveAndFlush(new ConversationEntity(
+                UUID.randomUUID().toString(), patient.getId(), unrelatedProvider.getId()));
+        conversations.flush();
+        recordConsents.flush();
+
+        mockMvc.perform(get("/api/v1/conversations").param("page", "0").param("size", "2")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.content.length()").value(2));
+        mockMvc.perform(get("/api/v1/conversations")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3));
+        mockMvc.perform(get("/api/v1/conversations").param("page", "0").param("size", "1")
+                        .with(user(providers.getFirst().getEmail()).roles("PROVIDER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content.length()").value(1));
+        mockMvc.perform(get("/api/v1/patients/me/record-consents")
+                        .param("page", "0").param("size", "2")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].providerName").exists());
+        mockMvc.perform(get("/api/v1/patients/me/record-consents")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3));
+        mockMvc.perform(get("/api/v1/conversations").param("page", "-1")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/patients/me/record-consents")
+                        .param("page", "0").param("size", "101")
                         .with(user(patient.getEmail()).roles("PATIENT")))
                 .andExpect(status().isBadRequest());
     }

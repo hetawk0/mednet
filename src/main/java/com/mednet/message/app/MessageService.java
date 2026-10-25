@@ -1,6 +1,8 @@
 package com.mednet.message.app;
 
 import java.util.UUID;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
@@ -27,6 +29,9 @@ import com.mednet.provider.data.ProviderApplicationRepository;
 @Service
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url")
 public class MessageService {
+
+    private static final java.util.List<String> CARE_RELATIONSHIP_STATUSES =
+            java.util.List.of("CONFIRMED", "COMPLETED", "RESCHEDULE_REQUESTED");
 
     private final PatientCareAccess careAccess;
     private final ProviderApplicationRepository providers;
@@ -87,15 +92,54 @@ public class MessageService {
     }
 
     @Transactional
+    public Page<ConversationDetails> pageConversations(
+            String actorEmail, String role, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pagination parameters");
+        }
+        PageRequest pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "updatedAt").and(Sort.by(Sort.Direction.DESC, "id")));
+        Page<ConversationEntity> rows;
+        if ("PATIENT".equals(role)) {
+            PlatformAccountEntity patient = careAccess.requirePatient(actorEmail);
+            rows = conversations.findEligibleByPatient(
+                    patient.getId(), CARE_RELATIONSHIP_STATUSES, pageable);
+        } else {
+            ProviderApplicationEntity provider = careAccess.requireApprovedProviderByEmail(actorEmail);
+            rows = conversations.findEligibleByProvider(
+                    provider.getId(), CARE_RELATIONSHIP_STATUSES, pageable);
+        }
+        Map<String, ProviderApplicationEntity> providersById = providers.findAllById(
+                        rows.getContent().stream()
+                                .map(ConversationEntity::getProviderApplicationId)
+                                .collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.toMap(ProviderApplicationEntity::getId, provider -> provider));
+        return rows.map(conversation -> {
+            audit(actorEmail, "message.conversation_accessed", "conversation", conversation.getId());
+            ProviderApplicationEntity provider = providersById.get(conversation.getProviderApplicationId());
+            if (provider == null) {
+                throw notFound();
+            }
+            return details(conversation, provider);
+        });
+    }
+
+    @Transactional
     public Page<MessageDetails> messages(String actorEmail, String role, String conversationId, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pagination parameters");
+        }
         ConversationEntity conversation = conversation(conversationId);
         participant(conversation, actorEmail, role);
         audit(actorEmail, "message.history_accessed", "conversation", conversationId);
         return messages.findByConversationIdOrderByCreatedAtAsc(
                         conversationId,
                         PageRequest.of(
-                                Math.max(page, 0),
-                                Math.min(Math.max(size, 1), 100),
+                                page,
+                                size,
                                 Sort.by(Sort.Direction.ASC, "createdAt")))
                 .map(MessageService::messageDetails);
     }
@@ -153,7 +197,7 @@ public class MessageService {
                 .findFirstByPatientAccountIdAndProviderApplicationIdAndStatusInOrderByCreatedAtDesc(
                         conversation.getPatientAccountId(),
                         conversation.getProviderApplicationId(),
-                        java.util.List.of("CONFIRMED", "COMPLETED", "RESCHEDULE_REQUESTED"))
+                        CARE_RELATIONSHIP_STATUSES)
                 .isPresent();
     }
 

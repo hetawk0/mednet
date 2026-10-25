@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
@@ -70,6 +72,28 @@ public class PatientRecordService {
                                 consent.getRevokedAt()))
                         .orElseThrow(PatientRecordService::notFound))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<RecordConsent> pageConsents(String patientEmail, int page, int size) {
+        PlatformAccountEntity patient = requirePatient(patientEmail);
+        Page<PatientProviderRecordConsentEntity> rows = consents.findByPatientAccountId(
+                patient.getId(),
+                pageRequest(page, size).withSort(
+                        Sort.by(Sort.Direction.DESC, "updatedAt").and(Sort.by(Sort.Direction.DESC, "id"))));
+        Map<String, ProviderApplicationEntity> providersById = providers.findAllById(
+                        rows.getContent().stream()
+                                .map(PatientProviderRecordConsentEntity::getProviderApplicationId)
+                                .collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.toMap(ProviderApplicationEntity::getId, provider -> provider));
+        return rows.map(consent -> {
+            ProviderApplicationEntity provider = providersById.get(consent.getProviderApplicationId());
+            if (provider == null) {
+                throw notFound();
+            }
+            return toConsent(consent, provider);
+        });
     }
 
     @Transactional

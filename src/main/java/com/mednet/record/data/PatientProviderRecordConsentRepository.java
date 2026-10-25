@@ -3,6 +3,8 @@ package com.mednet.record.data;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -25,6 +27,9 @@ public interface PatientProviderRecordConsentRepository
 
     List<PatientProviderRecordConsentEntity> findByPatientAccountIdOrderByUpdatedAtDesc(
             String patientAccountId);
+
+    Page<PatientProviderRecordConsentEntity> findByPatientAccountId(
+            String patientAccountId, Pageable pageable);
 
     boolean existsByPatientAccountId(String patientAccountId);
 

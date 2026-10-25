@@ -39,6 +39,14 @@ public class MessageController {
         return service.list(actor.getName(), role(actor));
     }
 
+    @GetMapping(value = "/conversations", params = "page")
+    public Page<ConversationDetails> conversationsPage(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication actor) {
+        return service.pageConversations(actor.getName(), role(actor), page, size);
+    }
+
     @PostMapping("/conversations")
     @PreAuthorize("hasRole('PATIENT')")
     public ConversationDetails open(
