@@ -102,6 +102,7 @@ schemas, status codes, and parameters. The current guarded MVP includes:
   identifier. Read-only: review decisions remain with the doctor.
 - Patient profile, consent-gated records, medications, vitals, and notifications.
 - Provider applications, approved-provider directory, availability, and appointments.
+- In-app appointment reminders for both participants, generated within 24 hours and again within 1 hour of a confirmed appointment. These reminders are idempotent; SMS, email, and push delivery remain out of scope.
 - Participant-only text conversations associated with confirmed appointments.
 - Patient home-care and laboratory requests, assigned partner work queues, and laboratory result review/release.
 - Administrator dashboard, provider review, account provisioning, and operational workflows.

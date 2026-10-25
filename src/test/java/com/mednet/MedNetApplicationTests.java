@@ -51,6 +51,7 @@ import com.mednet.laboratory.data.LaboratoryResultEntity;
 import com.mednet.laboratory.data.LaboratoryResultRepository;
 import com.mednet.service.data.PatientServiceRequestEntity;
 import com.mednet.service.data.PatientServiceRequestRepository;
+import com.mednet.appointment.app.AppointmentReminderService;
 import com.mednet.medication.app.MedicationService;
 import com.mednet.medication.data.MedicationScheduleEntity;
 import com.mednet.medication.data.MedicationScheduleRepository;
@@ -131,6 +132,9 @@ class MedNetApplicationTests {
 
     @Autowired
     private AppointmentRepository appointments;
+
+    @Autowired
+    private AppointmentReminderService appointmentReminders;
 
     @Autowired
     private ProviderAvailabilitySlotRepository availabilitySlots;
@@ -596,6 +600,48 @@ class MedNetApplicationTests {
         assertThat(adminAppointment.has("status")).isTrue();
 
         assertThat(appointments.findById(appointmentId).orElseThrow().getStatus()).isEqualTo("CANCELLED");
+    }
+
+    @Test
+    void confirmedAppointmentsCreateIdempotentInAppRemindersForBothParticipants() {
+        ProviderApplicationEntity provider = approvedProvider("Dr Reminder", "Family medicine");
+        PlatformAccountEntity patient = verifiedAccount(
+                "appointment-reminder-patient-" + UUID.randomUUID() + "@mednet.test", "PATIENT");
+
+        AppointmentEntity dayAhead = confirmedAppointment(provider, patient, Instant.now().plusSeconds(23 * 60 * 60));
+        AppointmentEntity hourAhead = confirmedAppointment(provider, patient, Instant.now().plusSeconds(30 * 60));
+        ProviderAvailabilitySlotEntity pendingSlot = availabilitySlots.saveAndFlush(new ProviderAvailabilitySlotEntity(
+                UUID.randomUUID().toString(),
+                provider.getId(),
+                Instant.now().plusSeconds(15 * 60),
+                Instant.now().plusSeconds(45 * 60)));
+        AppointmentEntity pending = appointments.saveAndFlush(new AppointmentEntity(
+                UUID.randomUUID().toString(), patient.getId(), provider.getId(), pendingSlot.getId()));
+        AppointmentEntity cancelled = confirmedAppointment(
+                provider, patient, Instant.now().plusSeconds(20 * 60));
+        cancelled.cancel();
+        appointments.saveAndFlush(cancelled);
+
+        appointmentReminders.createDueReminders();
+        appointmentReminders.createDueReminders();
+
+        assertThat(notificationService.list(patient.getEmail(), 0, 100).getContent())
+                .filteredOn(notification -> notification.resourceId().equals(dayAhead.getId()))
+                .extracting(NotificationService.NotificationDetails::title)
+                .containsExactly("You have an appointment within 24 hours");
+        assertThat(notificationService.list(patient.getEmail(), 0, 100).getContent())
+                .filteredOn(notification -> notification.resourceId().equals(hourAhead.getId()))
+                .extracting(NotificationService.NotificationDetails::title)
+                .containsExactly("You have an appointment within 1 hour");
+        assertThat(notificationService.list(provider.getEmail(), 0, 100).getContent())
+                .filteredOn(notification -> notification.resourceId().equals(dayAhead.getId()))
+                .hasSize(1);
+        assertThat(notificationService.list(provider.getEmail(), 0, 100).getContent())
+                .filteredOn(notification -> notification.resourceId().equals(hourAhead.getId()))
+                .hasSize(1);
+        assertThat(notificationService.list(patient.getEmail(), 0, 100).getContent())
+                .noneMatch(notification -> notification.resourceId().equals(cancelled.getId())
+                        || notification.resourceId().equals(pending.getId()));
     }
 
     @Test
@@ -1729,6 +1775,21 @@ class MedNetApplicationTests {
         PlatformAccountEntity account = new PlatformAccountEntity(UUID.randomUUID().toString(), email, type);
         account.verifyEmail();
         return accounts.saveAndFlush(account);
+    }
+
+    private AppointmentEntity confirmedAppointment(
+            ProviderApplicationEntity provider, PlatformAccountEntity patient, Instant startsAt) {
+        ProviderAvailabilitySlotEntity slot = new ProviderAvailabilitySlotEntity(
+                UUID.randomUUID().toString(),
+                provider.getId(),
+                startsAt,
+                startsAt.plusSeconds(1_800));
+        slot.reserve();
+        availabilitySlots.saveAndFlush(slot);
+        AppointmentEntity appointment = new AppointmentEntity(
+                UUID.randomUUID().toString(), patient.getId(), provider.getId(), slot.getId());
+        appointment.confirm();
+        return appointments.saveAndFlush(appointment);
     }
 
     private PlatformAccountEntity carePatient(ProviderApplicationEntity provider, String name, boolean consent) {

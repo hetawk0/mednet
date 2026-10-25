@@ -1,5 +1,6 @@
 package com.mednet.appointment.data;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -12,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
+import com.mednet.provider.data.ProviderAvailabilitySlotEntity;
 
 public interface AppointmentRepository extends JpaRepository<AppointmentEntity, String> {
 
@@ -32,6 +34,19 @@ public interface AppointmentRepository extends JpaRepository<AppointmentEntity, 
     boolean existsByPatientAccountId(String patientAccountId);
 
     boolean existsByProviderApplicationId(String providerApplicationId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select appointment from AppointmentEntity appointment,
+                 ProviderAvailabilitySlotEntity slot
+            where appointment.status = 'CONFIRMED'
+              and appointment.availabilitySlotId = slot.id
+              and slot.startsAt > :after
+              and slot.startsAt <= :before
+            order by slot.startsAt asc
+            """)
+    List<AppointmentEntity> findConfirmedAppointmentsStartingBetween(
+            @Param("after") Instant after, @Param("before") Instant before);
 
     /** Patients with an appointment in one of the given statuses with this provider. */
     @Query("""

@@ -675,6 +675,8 @@ The following notification catalogue is derived from the events described in Sec
 | NT-14 | Laboratory result available                              | Patient                          | Must     | To confirm |
 | NT-15 | New provider application awaiting review                 | Administrator                    | Must     | To confirm |
 
+Current guarded-MVP implementation note (not client approval): confirmed appointments generate in-app reminders for both participants within 24 hours and again within 1 hour of the start time. This implementation choice does not resolve the broader notification-channel questions in OQ-43 and OQ-44.
+
 Recommendation for client consideration: notifications should announce that something requires attention without disclosing clinical detail outside the platform, since notifications may be seen on a shared or unlocked device. This is captured as FR-064 and requires client confirmation.
 
 ## 13. Data and Information Requirements
