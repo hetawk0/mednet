@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.context.event.EventListener;
 
+import com.mednet.api.Pagination;
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.notification.data.NotificationEntity;
@@ -95,11 +95,12 @@ public class NotificationService {
     @Transactional
     public Page<NotificationDetails> list(String email, int page, int size) {
         PlatformAccountEntity account = account(email);
-        return notifications.findByRecipientAccountIdOrderByCreatedAtDesc(
-                        account.getId(), PageRequest.of(
-                                Math.max(page, 0),
-                                Math.min(Math.max(size, 1), 100),
-                                Sort.by(Sort.Direction.DESC, "createdAt")))
+        return notifications.findByRecipientAccountId(
+                        account.getId(),
+                        Pagination.pageRequest(
+                                page,
+                                size,
+                                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id"))))
                 .map(NotificationService::toDetails);
     }
 

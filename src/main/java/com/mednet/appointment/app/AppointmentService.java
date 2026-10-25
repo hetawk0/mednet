@@ -6,7 +6,6 @@ import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mednet.admin.data.AdminAuditEventEntity;
 import com.mednet.admin.data.AdminAuditEventRepository;
+import com.mednet.api.Pagination;
 import com.mednet.admin.data.PlatformAccountEntity;
 import com.mednet.admin.data.PlatformAccountRepository;
 import com.mednet.notification.app.NotificationService;
@@ -94,27 +94,27 @@ public class AppointmentService {
 
     @Transactional(readOnly = true)
     public Page<AppointmentDetails> list(String actorEmail, String role, int page, int size) {
-        int safePage = Math.max(0, page);
-        int safeSize = Math.min(Math.max(1, size), 100);
-        PageRequest pageable = PageRequest.of(
-                safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        var pageable = Pagination.pageRequest(
+                page,
+                size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
         if ("PATIENT".equals(role)) {
             PlatformAccountEntity patient = patient(actorEmail);
-            return appointments.findByPatientAccountIdOrderByCreatedAtDesc(patient.getId(), pageable)
+            return appointments.findByPatientAccountId(patient.getId(), pageable)
                     .map(this::details);
         }
         ProviderApplicationEntity provider = approvedProvider(actorEmail);
-        return appointments.findByProviderApplicationIdOrderByCreatedAtDesc(provider.getId(), pageable)
+        return appointments.findByProviderApplicationId(provider.getId(), pageable)
                 .map(this::details);
     }
 
     @Transactional
     public Page<AdminAppointmentSummary> adminList(String actorEmail, int page, int size) {
-        int safePage = Math.max(0, page);
-        int safeSize = Math.min(Math.max(1, size), 100);
         Page<AdminAppointmentSummary> result = appointments
-                .findAll(PageRequest.of(
-                        safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .findAll(Pagination.pageRequest(
+                        page,
+                        size,
+                        Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id"))))
                 .map(appointment -> {
                     ProviderAvailabilitySlotEntity slot = slots.findById(appointment.getAvailabilitySlotId())
                             .orElseThrow(AppointmentService::notFound);

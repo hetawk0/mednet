@@ -21,11 +21,9 @@ public interface AppointmentRepository extends JpaRepository<AppointmentEntity, 
     @Query("select appointment from AppointmentEntity appointment where appointment.id = :id")
     Optional<AppointmentEntity> findByIdForUpdate(@Param("id") String id);
 
-    Page<AppointmentEntity> findByPatientAccountIdOrderByCreatedAtDesc(
-            String patientAccountId, Pageable pageable);
+    Page<AppointmentEntity> findByPatientAccountId(String patientAccountId, Pageable pageable);
 
-    Page<AppointmentEntity> findByProviderApplicationIdOrderByCreatedAtDesc(
-            String providerApplicationId, Pageable pageable);
+    Page<AppointmentEntity> findByProviderApplicationId(String providerApplicationId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<AppointmentEntity> findFirstByPatientAccountIdAndProviderApplicationIdAndStatusInOrderByCreatedAtDesc(

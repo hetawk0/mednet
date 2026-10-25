@@ -10,13 +10,13 @@ import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mednet.api.Pagination;
 import com.mednet.admin.data.AdminAuditEventEntity;
 import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.notification.app.NotificationService;
@@ -48,12 +48,13 @@ public class ProviderService {
 
     @Transactional(readOnly = true)
     public Page<ProviderDirectoryEntry> directory(int page, int size, String specialty, String search) {
-        int safePage = Math.max(0, page);
-        int safeSize = Math.min(Math.max(1, size), 100);
         Page<ProviderApplicationEntity> providers = applications.findApprovedDirectory(
                 normalizeFilter(specialty),
                 normalizeFilter(search),
-                PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "displayName")));
+                Pagination.pageRequest(
+                        page,
+                        size,
+                        Sort.by(Sort.Order.asc("displayName"), Sort.Order.asc("id"))));
         // One grouped query for the page's next open times, instead of one availability call per provider.
         Map<String, Instant> nextOpen = providers.isEmpty()
                 ? Map.of()

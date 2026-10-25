@@ -6,13 +6,13 @@ import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mednet.api.Pagination;
 import com.mednet.admin.data.AdminAuditEventEntity;
 import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.provider.data.ProviderApplicationEntity;
@@ -75,13 +75,14 @@ public class ProviderAvailabilityService {
     @Transactional(readOnly = true)
     public Page<AvailabilitySlot> available(String providerId, int page, int size) {
         requireApprovedProviderById(providerId);
-        int safePage = Math.max(0, page);
-        int safeSize = Math.min(Math.max(1, size), 100);
         return slots.findByProviderApplicationIdAndStatusAndStartsAtAfter(
                         providerId,
                         "OPEN",
                         Instant.now(),
-                        PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startsAt")))
+                        Pagination.pageRequest(
+                                page,
+                                size,
+                                Sort.by(Sort.Order.asc("startsAt"), Sort.Order.asc("id"))))
                 .map(ProviderAvailabilityService::toModel);
     }
 

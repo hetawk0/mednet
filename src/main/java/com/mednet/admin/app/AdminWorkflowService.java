@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mednet.api.Pagination;
 import com.mednet.admin.data.AdminAuditEventEntity;
 import com.mednet.admin.data.AdminAuditEventRepository;
 import com.mednet.admin.data.AdminWorkflowModels.AdminAuditEvent;
@@ -168,9 +169,10 @@ public class AdminWorkflowService {
     @Transactional(readOnly = true)
     public Page<PlatformAccount> accounts(
             int page, int size, String search, String status, String accountType, Boolean emailVerified) {
-        int safePage = Math.max(0, page);
-        int safeSize = Math.min(Math.max(1, size), 100);
-        var pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        var pageable = Pagination.pageRequest(
+                page,
+                size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
         String normalizedSearch = search == null ? "" : search.trim();
         String normalizedStatus = status == null || status.isBlank() ? null : requireStatus(status, ACCOUNT_STATUSES);
         String normalizedType =

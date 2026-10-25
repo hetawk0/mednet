@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.sql.Timestamp;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -23,6 +24,7 @@ import org.springframework.boot.health.contributor.Status;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -113,6 +115,9 @@ class MedNetApplicationTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -1795,6 +1800,143 @@ class MedNetApplicationTests {
         mockMvc.perform(get("/api/v1/providers/specialties"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.specialty == 'Perf specialty " + suffix + "')].providers").value(org.hamcrest.Matchers.hasItem(2)));
+    }
+
+    @Test
+    void auditedListPagesRejectInvalidPaginationAndTieBreakById() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        PlatformAccountEntity patient = verifiedAccount("page-ties-" + suffix + "@mednet.test", "PATIENT");
+        patientProfiles.saveAndFlush(new PatientProfileEntity(
+                UUID.randomUUID().toString(), patient.getId(), "Pagination Patient", LocalDate.of(1990, 1, 1),
+                "+231770000000", "Monrovia"));
+        ProviderApplicationEntity provider = approvedProvider("Page tie provider " + suffix, "Page tie specialty");
+        var ids = java.util.stream.Stream.generate(() -> UUID.randomUUID().toString())
+                .limit(10)
+                .sorted()
+                .toList();
+
+        ProviderApplicationEntity directoryFirst = new ProviderApplicationEntity(
+                ids.get(0), "Directory tie " + suffix, "directory-first-" + suffix + "@mednet.test",
+                "Page tie specialty", "REF-A");
+        ProviderApplicationEntity directorySecond = new ProviderApplicationEntity(
+                ids.get(1), "Directory tie " + suffix, "directory-second-" + suffix + "@mednet.test",
+                "Page tie specialty", "REF-B");
+        directoryFirst.review("APPROVED", ADMIN_EMAIL);
+        directorySecond.review("APPROVED", ADMIN_EMAIL);
+        providerApplications.saveAllAndFlush(java.util.List.of(directoryFirst, directorySecond));
+
+        Instant future = Instant.now().plusSeconds(172_800).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        ProviderAvailabilitySlotEntity availabilityFirst = new ProviderAvailabilitySlotEntity(
+                ids.get(2), provider.getId(), future, future.plusSeconds(1800));
+        ProviderAvailabilitySlotEntity availabilitySecond = new ProviderAvailabilitySlotEntity(
+                ids.get(3), provider.getId(), future, future.plusSeconds(1800));
+        availabilitySlots.saveAllAndFlush(java.util.List.of(availabilityFirst, availabilitySecond));
+
+        ProviderAvailabilitySlotEntity appointmentSlotFirst = availabilitySlots.saveAndFlush(
+                new ProviderAvailabilitySlotEntity(ids.get(4), provider.getId(), future.plusSeconds(3600),
+                        future.plusSeconds(5400)));
+        ProviderAvailabilitySlotEntity appointmentSlotSecond = availabilitySlots.saveAndFlush(
+                new ProviderAvailabilitySlotEntity(ids.get(5), provider.getId(), future.plusSeconds(7200),
+                        future.plusSeconds(9000)));
+        AppointmentEntity appointmentFirst =
+                new AppointmentEntity(ids.get(6), patient.getId(), provider.getId(), appointmentSlotFirst.getId());
+        AppointmentEntity appointmentSecond =
+                new AppointmentEntity(ids.get(7), patient.getId(), provider.getId(), appointmentSlotSecond.getId());
+        appointments.saveAllAndFlush(java.util.List.of(appointmentFirst, appointmentSecond));
+
+        PlatformAccountEntity accountFirst = verifiedAccount("accounts-tie-first-" + suffix + "@mednet.test", "PATIENT");
+        PlatformAccountEntity accountSecond = verifiedAccount("accounts-tie-second-" + suffix + "@mednet.test", "PATIENT");
+        notificationService.create(patient.getId(), "pagination-tie:" + suffix + ":a", "TEST", "Tie A", "test", "a");
+        notificationService.create(patient.getId(), "pagination-tie:" + suffix + ":b", "TEST", "Tie B", "test", "b");
+        var tiedTimestamp = Timestamp.from(Instant.parse("2025-01-01T00:00:00Z"));
+        var latestTieTimestamp = Timestamp.from(Instant.parse("2099-01-01T00:00:00Z"));
+        jdbcTemplate.update("UPDATE appointments SET created_at = ? WHERE id IN (?, ?)",
+                latestTieTimestamp, appointmentFirst.getId(), appointmentSecond.getId());
+        jdbcTemplate.update("UPDATE platform_accounts SET created_at = ? WHERE id IN (?, ?)",
+                tiedTimestamp, accountFirst.getId(), accountSecond.getId());
+        jdbcTemplate.update(
+                "UPDATE user_notifications SET created_at = ? WHERE event_key IN (?, ?)",
+                tiedTimestamp, "pagination-tie:" + suffix + ":a", "pagination-tie:" + suffix + ":b");
+        var expectedAccountIds = java.util.List.of(accountFirst.getId(), accountSecond.getId()).stream()
+                .sorted()
+                .toList();
+        var notificationIds = jdbcTemplate.queryForList(
+                "SELECT id FROM user_notifications WHERE event_key IN (?, ?) ORDER BY id",
+                String.class,
+                "pagination-tie:" + suffix + ":a",
+                "pagination-tie:" + suffix + ":b");
+
+        mockMvc.perform(get("/api/v1/providers").param("search", "Directory tie " + suffix)
+                        .param("page", "0").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(directoryFirst.getId()));
+        mockMvc.perform(get("/api/v1/providers").param("search", "Directory tie " + suffix)
+                        .param("page", "1").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(directorySecond.getId()));
+
+        mockMvc.perform(get("/api/v1/providers/{id}/availability", provider.getId())
+                        .param("page", "0").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(availabilityFirst.getId()));
+        mockMvc.perform(get("/api/v1/providers/{id}/availability", provider.getId())
+                        .param("page", "1").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(availabilitySecond.getId()));
+
+        mockMvc.perform(get("/api/v1/appointments").param("page", "0").param("size", "1")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(appointmentFirst.getId()));
+        mockMvc.perform(get("/api/v1/appointments").param("page", "1").param("size", "1")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(appointmentSecond.getId()));
+        mockMvc.perform(get("/api/v1/admin/appointments").param("page", "0").param("size", "1")
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(appointmentFirst.getId()));
+        mockMvc.perform(get("/api/v1/admin/appointments").param("page", "1").param("size", "1")
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(appointmentSecond.getId()));
+
+        mockMvc.perform(get("/api/v1/admin/accounts").param("search", "accounts-tie-")
+                        .param("page", "0").param("size", "1")
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(expectedAccountIds.get(0)));
+        mockMvc.perform(get("/api/v1/admin/accounts").param("search", "accounts-tie-")
+                        .param("page", "1").param("size", "1")
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(expectedAccountIds.get(1)));
+
+        mockMvc.perform(get("/api/v1/notifications").param("page", "0").param("size", "1")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(notificationIds.get(0)));
+        mockMvc.perform(get("/api/v1/notifications").param("page", "1").param("size", "1")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(notificationIds.get(1)));
+
+        mockMvc.perform(get("/api/v1/providers").param("page", "-1"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/appointments").param("size", "0")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/admin/appointments").param("size", "0")
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/admin/accounts").param("size", "101")
+                        .with(user(ADMIN_EMAIL).roles("ADMIN")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/notifications").param("page", "-1")
+                        .with(user(patient.getEmail()).roles("PATIENT")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/providers/{id}/availability", provider.getId()).param("size", "101"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
