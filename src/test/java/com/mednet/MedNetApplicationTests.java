@@ -218,8 +218,8 @@ class MedNetApplicationTests {
 
     @Test
     void databasePoolIsBoundedAndFlywayRetriesTemporaryConnectionExhaustion() {
-        assertThat(dataSource.getMaximumPoolSize()).isEqualTo(5);
-        assertThat(dataSource.getMinimumIdle()).isEqualTo(1);
+        assertThat(dataSource.getMaximumPoolSize()).isEqualTo(2);
+        assertThat(dataSource.getMinimumIdle()).isZero();
         assertThat(flyway.getConfiguration().getConnectRetries()).isEqualTo(10);
         assertThat(flyway.getConfiguration().getConnectRetriesInterval()).isEqualTo(2);
     }
