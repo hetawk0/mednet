@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mednet.admin.reporting.AdminReportService;
 import com.mednet.admin.reporting.AdminReportService.AdminAggregateReport;
 import com.mednet.admin.reporting.AdminReportService.AggregatePoint;
+import com.mednet.admin.reporting.AdminReportService.SnapshotPoint;
 
 @RestController
 @RequestMapping("/api/v1/admin/reports")
@@ -53,15 +54,33 @@ public class AdminReportController {
     private static String csv(AdminAggregateReport report) {
         StringBuilder output = new StringBuilder("Period,Dataset,Category,Status,Count\r\n");
         append(output, "accounts", report.accounts());
+        output.append("CURRENT,patients,ALL,REGISTERED,")
+                .append(report.totalRegisteredPatients())
+                .append("\r\n");
+        append(output, "patient_registrations", report.patientRegistrations());
+        appendSnapshot(output, "provider_status", report.providersByStatus());
         append(output, "appointments", report.appointments());
+        append(output, "completed_text_consultations", report.completedVirtualConsultations());
         append(output, "service_requests", report.serviceRequests());
         append(output, "laboratory_results", report.laboratoryResults());
+        appendSnapshot(output, "awaiting_action", report.awaitingAction());
         return output.toString();
     }
 
     private static void append(StringBuilder output, String dataset, List<AggregatePoint> points) {
         for (AggregatePoint point : points) {
             output.append(cell(point.month())).append(',')
+                    .append(cell(dataset)).append(',')
+                    .append(cell(point.category())).append(',')
+                    .append(cell(point.status())).append(',')
+                    .append(point.count()).append("\r\n");
+        }
+    }
+
+    private static void appendSnapshot(
+            StringBuilder output, String dataset, List<SnapshotPoint> points) {
+        for (SnapshotPoint point : points) {
+            output.append("CURRENT,")
                     .append(cell(dataset)).append(',')
                     .append(cell(point.category())).append(',')
                     .append(cell(point.status())).append(',')

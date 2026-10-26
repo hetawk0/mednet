@@ -47,6 +47,8 @@ import com.mednet.provider.data.ProviderAvailabilitySlotEntity;
 import com.mednet.provider.data.ProviderAvailabilitySlotRepository;
 import com.mednet.appointment.data.AppointmentRepository;
 import com.mednet.appointment.data.AppointmentEntity;
+import com.mednet.consultation.data.ConsultationEntity;
+import com.mednet.consultation.data.ConsultationRepository;
 import com.mednet.record.data.ClinicalRecordRepository;
 import com.mednet.record.data.PatientProviderRecordConsentRepository;
 import com.mednet.record.data.PatientProviderRecordConsentEntity;
@@ -150,6 +152,9 @@ class MedNetApplicationTests {
 
     @Autowired
     private AppointmentRepository appointments;
+
+    @Autowired
+    private ConsultationRepository consultations;
 
     @Autowired
     private AppointmentReminderService appointmentReminders;
@@ -2112,6 +2117,14 @@ class MedNetApplicationTests {
                 UUID.randomUUID().toString(), provider.getId(), slotStart, slotStart.plusSeconds(1_800)));
         appointments.saveAndFlush(new AppointmentEntity(
                 UUID.randomUUID().toString(), patient.getId(), provider.getId(), slot.getId()));
+        AppointmentEntity consultationAppointment = new AppointmentEntity(
+                UUID.randomUUID().toString(), patient.getId(), provider.getId(), slot.getId());
+        consultationAppointment.confirm();
+        appointments.saveAndFlush(consultationAppointment);
+        ConsultationEntity consultation = new ConsultationEntity(
+                UUID.randomUUID().toString(), consultationAppointment.getId());
+        consultation.end();
+        consultations.saveAndFlush(consultation);
         PatientServiceRequestEntity request = serviceRequests.saveAndFlush(new PatientServiceRequestEntity(
                 UUID.randomUUID().toString(), patient.getId(), "LABORATORY", "Blood test", "Monrovia"));
         LaboratoryResultEntity result = labResults.saveAndFlush(new LaboratoryResultEntity(
@@ -2131,10 +2144,20 @@ class MedNetApplicationTests {
                 .contains("\"category\":\"TEXT\"")
                 .contains("\"category\":\"LABORATORY\"")
                 .contains("\"status\":\"PENDING_REVIEW\"")
+                .contains("\"totalRegisteredPatients\":")
+                .contains("\"patientRegistrations\":[")
+                .contains("\"providersByStatus\":[")
+                .contains("\"completedVirtualConsultations\":[")
+                .contains("\"awaitingAction\":[")
                 .doesNotContain(patient.getEmail())
                 .doesNotContain(laboratory.getEmail())
                 .doesNotContain(patient.getId())
                 .doesNotContain(result.getSummary());
+         assertThat(reportJson)
+                .contains("\"status\":\"APPROVED\"")
+                .contains("\"status\":\"PENDING\"")
+                .contains("\"status\":\"OPEN\"")
+                .contains("\"status\":\"COMPLETED\"");
 
         MvcResult csv = mockMvc.perform(get("/api/v1/admin/reports/export.csv")
                         .param("from", today.toString())
@@ -2146,6 +2169,10 @@ class MedNetApplicationTests {
                 .andReturn();
         assertThat(csv.getResponse().getContentAsString())
                 .contains("Period,Dataset,Category,Status,Count")
+                .contains("patient_registrations")
+                .contains("provider_status")
+                .contains("completed_text_consultations")
+                .contains("awaiting_action")
                 .contains("laboratory_results")
                 .doesNotContain(patient.getEmail())
                 .doesNotContain(result.getSummary());

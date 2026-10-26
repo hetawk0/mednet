@@ -105,14 +105,25 @@ export type AggregatePoint = {
   count: number;
 };
 
+export type SnapshotPoint = {
+  category: string;
+  status: string;
+  count: number;
+};
+
 export type AdminAggregateReport = {
   from: string;
   through: string;
   generatedAt: string;
   accounts: AggregatePoint[];
+  totalRegisteredPatients: number;
+  patientRegistrations: AggregatePoint[];
+  providersByStatus: SnapshotPoint[];
   appointments: AggregatePoint[];
+  completedVirtualConsultations: AggregatePoint[];
   serviceRequests: AggregatePoint[];
   laboratoryResults: AggregatePoint[];
+  awaitingAction: SnapshotPoint[];
 };
 
 export type AccountFilters = {

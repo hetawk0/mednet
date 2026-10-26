@@ -15,7 +15,7 @@ import { consultationModeLabel } from "@/features/find-care/format";
 import { useDebouncedValue, usePageFor } from "@/features/workspace/paging";
 import { ErrorRow, LoadingRows } from "@/features/workspace/states";
 import { useResource } from "@/features/workspace/use-resource";
-import { adminApi, type AdminAggregateReport, type AdminAppointment, type AdminOverview, type AggregatePoint, type AuditEvent } from "./admin-api";
+import { adminApi, type AdminAggregateReport, type AdminAppointment, type AdminOverview, type AggregatePoint, type AuditEvent, type SnapshotPoint } from "./admin-api";
 import { CsvExportButton } from "./csv-export-button";
 import { exportAllAppointments, exportAllAuditEvents } from "./csv-export";
 import { formatAdminDateTime } from "./frame";
@@ -263,12 +263,14 @@ export function ReportsView() {
 
   const reportRows = (data: AdminAggregateReport) => {
     const datasets: Array<{ dataset: string; points: AggregatePoint[] }> = [
-      { dataset: "Accounts", points: data.accounts },
+      { dataset: "Accounts by month", points: data.accounts },
+      { dataset: "Patient registrations", points: data.patientRegistrations },
       { dataset: "Appointments", points: data.appointments },
+      { dataset: "Completed text consultations", points: data.completedVirtualConsultations },
       { dataset: "Service requests", points: data.serviceRequests },
       { dataset: "Laboratory results", points: data.laboratoryResults },
     ];
-    return datasets.flatMap(({ dataset, points }) =>
+    const monthlyRows = datasets.flatMap(({ dataset, points }) =>
       points.map((point) => [
         point.month,
         dataset,
@@ -277,6 +279,22 @@ export function ReportsView() {
         point.count,
       ]),
     );
+    const snapshotRows = (
+      dataset: string,
+      points: SnapshotPoint[],
+    ) => points.map((point) => [
+      "CURRENT",
+      dataset,
+      point.category,
+      point.status,
+      point.count,
+    ]);
+    return [
+      ...monthlyRows,
+      ["CURRENT", "Registered patients", "ALL", "REGISTERED", data.totalRegisteredPatients],
+      ...snapshotRows("Provider applications", data.providersByStatus),
+      ...snapshotRows("Awaiting action", data.awaitingAction),
+    ];
   };
 
   return (
@@ -298,8 +316,8 @@ export function ReportsView() {
       <Card className="flex flex-col gap-5">
         <CardHeader eyebrow="Aggregate reporting" title="Monthly activity" />
         <p className="text-caption text-text-secondary">
-          Counts are grouped by UTC creation month, category and status. No patient identifiers, message content,
-          laboratory result text or other clinical details are included. The default range is the latest 12 calendar months.
+          Monthly activity uses UTC dates. No patient identifiers, message content, laboratory result text or other clinical
+          details are included. The default range is the latest 12 calendar months.
         </p>
         <form onSubmit={applyRange} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <label className="grid gap-1.5 text-caption font-semibold text-ink">
@@ -331,6 +349,12 @@ export function ReportsView() {
             <p className="text-caption text-text-secondary" aria-live="polite">
               {reportData.from} through {reportData.through} · generated {formatAdminDateTime(reportData.generatedAt)}
             </p>
+            <p className="text-caption text-text-secondary">
+              Monthly account, appointment and service-request rows group records created in the selected period by
+              their current status; completed text consultations are grouped by their end month and lab results by
+              submission month. Current snapshots are measured at generation time and are not restricted by selected
+              dates. Missed appointments and overdue requests are not inferred; their definitions are not yet confirmed.
+            </p>
             <div className="flex justify-end">
               <CsvExportButton
                 filename={`mednet-aggregate-${reportData.from}-to-${reportData.through}`}
@@ -338,10 +362,16 @@ export function ReportsView() {
                 loadRows={async () => reportRows(reportData)}
               />
             </div>
-            <AggregateReportSection title="Accounts" points={reportData.accounts} />
-            <AggregateReportSection title="Appointments" points={reportData.appointments} />
-            <AggregateReportSection title="Home-care and laboratory requests" points={reportData.serviceRequests} />
-            <AggregateReportSection title="Laboratory results" points={reportData.laboratoryResults} />
+            <MetricGrid>
+              <MetricCard tone="success" value={reportData.totalRegisteredPatients} label="Registered patients" hint="Current total · RPT-01" />
+            </MetricGrid>
+            <AggregateReportSection title="Patient registrations by month · RPT-01" points={reportData.patientRegistrations} />
+            <SnapshotReportSection title="Provider applications by current status · RPT-02" points={reportData.providersByStatus} />
+            <AggregateReportSection title="Appointments by booking month and current status · RPT-03" points={reportData.appointments} />
+            <AggregateReportSection title="Completed text consultations · RPT-04" points={reportData.completedVirtualConsultations} />
+            <AggregateReportSection title="Home-care and laboratory requests · RPT-05 and RPT-06" points={reportData.serviceRequests} />
+            <AggregateReportSection title="Laboratory results · RPT-06" points={reportData.laboratoryResults} />
+            <SnapshotReportSection title="Requests awaiting action · RPT-07" points={reportData.awaitingAction} />
           </>
         ) : (
           <StateMessage kind="empty" title="Aggregate report is unavailable." />
@@ -349,6 +379,38 @@ export function ReportsView() {
       </Card>
       <AuditTrail title="Recent administrative activity" />
     </div>
+  );
+}
+
+function SnapshotReportSection({ title, points }: { title: string; points: SnapshotPoint[] }) {
+  return (
+    <section aria-label={title}>
+      <h3 className="text-heading text-ink">{title}</h3>
+      {points.length ? (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[24rem] border-collapse text-left text-caption">
+            <thead>
+              <tr className="border-b border-border text-text-secondary">
+                <th scope="col" className="py-2 pr-4">Category</th>
+                <th scope="col" className="py-2 pr-4">Current status</th>
+                <th scope="col" className="py-2 text-right">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {points.map((point) => (
+                <tr key={`${point.category}:${point.status}`} className="border-b border-line-soft">
+                  <td className="py-2 pr-4">{point.category.replaceAll("_", " ")}</td>
+                  <td className="py-2 pr-4">{point.status.replaceAll("_", " ")}</td>
+                  <td className="py-2 text-right tabular-nums">{point.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <StateMessage kind="empty" layout="inline" className="mt-2" title="No items for this snapshot." />
+      )}
+    </section>
   );
 }
 

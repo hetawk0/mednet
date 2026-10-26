@@ -34,6 +34,38 @@ public class AdminReportRepository {
                 """, from, to);
     }
 
+    public long totalRegisteredPatients() {
+        Long count = jdbc.queryForObject(
+                "select count(*) from platform_accounts where account_type = 'PATIENT'",
+                Long.class);
+        return count == null ? 0 : count;
+    }
+
+    public List<AdminReportService.AggregatePoint> patientRegistrations(
+            OffsetDateTime from, OffsetDateTime to) {
+        return query("""
+                select extract(year from created_at) as report_year,
+                       extract(month from created_at) as report_month,
+                       account_type as category,
+                       status,
+                       count(*) as total
+                from platform_accounts
+                where account_type = 'PATIENT' and created_at >= ? and created_at < ?
+                group by extract(year from created_at), extract(month from created_at), account_type, status
+                order by report_year, report_month, status
+                """, from, to);
+    }
+
+    public List<AdminReportService.SnapshotPoint> providersByStatus() {
+        return jdbc.query("""
+                select status, count(*) as total
+                from provider_applications
+                group by status
+                order by status
+                """, (result, row) -> new AdminReportService.SnapshotPoint(
+                "PROVIDER", result.getString("status"), result.getLong("total")));
+    }
+
     public List<AdminReportService.AggregatePoint> appointments(OffsetDateTime from, OffsetDateTime to) {
         return query("""
                 select extract(year from appointment.created_at) as report_year,
@@ -47,6 +79,26 @@ public class AdminReportRepository {
                 group by extract(year from appointment.created_at),
                          extract(month from appointment.created_at), slot.consultation_mode, appointment.status
                 order by report_year, report_month, category, appointment.status
+                """, from, to);
+    }
+
+    public List<AdminReportService.AggregatePoint> completedVirtualConsultations(
+            OffsetDateTime from, OffsetDateTime to) {
+        return query("""
+                select extract(year from consultation.ended_at) as report_year,
+                       extract(month from consultation.ended_at) as report_month,
+                       slot.consultation_mode as category,
+                       'COMPLETED' as status,
+                       count(*) as total
+                from consultations consultation
+                join appointments appointment on appointment.id = consultation.appointment_id
+                join provider_availability_slots slot on slot.id = appointment.availability_slot_id
+                where consultation.status = 'ENDED'
+                  and slot.consultation_mode = 'TEXT'
+                  and consultation.ended_at >= ? and consultation.ended_at < ?
+                group by extract(year from consultation.ended_at),
+                         extract(month from consultation.ended_at), slot.consultation_mode
+                order by report_year, report_month, category
                 """, from, to);
     }
 
@@ -76,6 +128,26 @@ public class AdminReportRepository {
                 group by extract(year from created_at), extract(month from created_at), status
                 order by report_year, report_month, status
                 """, from, to);
+    }
+
+    public List<AdminReportService.SnapshotPoint> awaitingAction() {
+        return jdbc.query("""
+                select category, status, sum(total) as total
+                from (
+                    select 'APPOINTMENT' as category, status, count(*) as total
+                    from appointments
+                    where status in ('PENDING', 'RESCHEDULE_REQUESTED')
+                    group by status
+                    union all
+                    select request_type as category, status, count(*) as total
+                    from patient_service_requests
+                    where status in ('OPEN', 'IN_PROGRESS')
+                    group by request_type, status
+                ) pending
+                group by category, status
+                order by category, status
+                """, (result, row) -> new AdminReportService.SnapshotPoint(
+                result.getString("category"), result.getString("status"), result.getLong("total")));
     }
 
     private List<AdminReportService.AggregatePoint> query(String sql, OffsetDateTime from, OffsetDateTime to) {

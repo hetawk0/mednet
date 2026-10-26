@@ -9,6 +9,8 @@ import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -22,6 +24,7 @@ public class AdminReportService {
         this.reports = reports;
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public AdminAggregateReport report(LocalDate from, LocalDate through) {
         LocalDate currentMonth = LocalDate.now(ZoneOffset.UTC).withDayOfMonth(1);
         if (from == null && through == null) {
@@ -46,9 +49,14 @@ public class AdminReportService {
                 through,
                 Instant.now(),
                 reports.accounts(start, endExclusive),
+                reports.totalRegisteredPatients(),
+                reports.patientRegistrations(start, endExclusive),
+                reports.providersByStatus(),
                 reports.appointments(start, endExclusive),
+                reports.completedVirtualConsultations(start, endExclusive),
                 reports.serviceRequests(start, endExclusive),
-                reports.laboratoryResults(start, endExclusive));
+                reports.laboratoryResults(start, endExclusive),
+                reports.awaitingAction());
     }
 
     public record AdminAggregateReport(
@@ -56,11 +64,19 @@ public class AdminReportService {
             LocalDate through,
             Instant generatedAt,
             List<AggregatePoint> accounts,
+            long totalRegisteredPatients,
+            List<AggregatePoint> patientRegistrations,
+            List<SnapshotPoint> providersByStatus,
             List<AggregatePoint> appointments,
+            List<AggregatePoint> completedVirtualConsultations,
             List<AggregatePoint> serviceRequests,
-            List<AggregatePoint> laboratoryResults) {
+            List<AggregatePoint> laboratoryResults,
+            List<SnapshotPoint> awaitingAction) {
     }
 
     public record AggregatePoint(String month, String category, String status, long count) {
+    }
+
+    public record SnapshotPoint(String category, String status, long count) {
     }
 }
