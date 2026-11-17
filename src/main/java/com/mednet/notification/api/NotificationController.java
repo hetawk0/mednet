@@ -34,8 +34,9 @@ public class NotificationController {
     public Page<NotificationDetails> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String eventType,
             Authentication actor) {
-        return service.list(actor.getName(), page, size);
+        return service.list(actor.getName(), page, size, eventType);
     }
 
     @GetMapping("/unread-count")

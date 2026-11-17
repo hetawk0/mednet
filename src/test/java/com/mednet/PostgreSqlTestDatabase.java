@@ -34,6 +34,7 @@ final class PostgreSqlTestDatabase {
         if (!url.startsWith("jdbc:postgresql:")) {
             throw new IllegalStateException("MEDNET_TEST_DATABASE_URL must be a jdbc:postgresql: URL");
         }
+        requireLocalHost(url, "true".equalsIgnoreCase(System.getenv("MEDNET_TEST_DATABASE_ALLOW_REMOTE")));
         if (RESET.compareAndSet(false, true)) {
             reset(url, username, password);
         }
@@ -72,6 +73,30 @@ final class PostgreSqlTestDatabase {
         } catch (SQLException exception) {
             throw new IllegalStateException("Cannot prepare the PostgreSQL test database as MEDNET_TEST_DATABASE_USERNAME "
                     + "(SQL state " + exception.getSQLState() + "): " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Refuses, before any connection is opened, a test database that is not on this machine. Hosted
+     * databases can pass the name, superuser and ownership checks (Supabase's {@code postgres} role is
+     * not a superuser and owns databases it creates), so the host is checked as well. Set
+     * {@code MEDNET_TEST_DATABASE_ALLOW_REMOTE=true} only for a disposable remote test server.
+     */
+    static void requireLocalHost(String url, boolean allowRemote) {
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("^jdbc:postgresql://([^/?]*)/").matcher(url);
+        if (!matcher.find()) {
+            throw new IllegalStateException("MEDNET_TEST_DATABASE_URL must name a host: jdbc:postgresql://host:port/database");
+        }
+        for (String address : matcher.group(1).split(",")) {
+            String host = address.startsWith("[")
+                    ? address.substring(1, Math.max(1, address.indexOf(']')))
+                    : address.replaceFirst(":\\d+$", "");
+            boolean local = host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1") || host.equals("::1");
+            if (!local && !allowRemote) {
+                throw new IllegalStateException("Refusing to use a PostgreSQL test database on '" + host
+                        + "': only localhost is allowed unless MEDNET_TEST_DATABASE_ALLOW_REMOTE=true");
+            }
         }
     }
 

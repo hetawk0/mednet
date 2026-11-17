@@ -13,7 +13,12 @@ export const BACKEND_ROLES = [
 
 export type BackendRole = (typeof BACKEND_ROLES)[number];
 
-export type Session = { email: string; role: BackendRole | (string & {}) };
+/**
+ * `role` is the effective role the API enforces. `accountType` is the stored account type (null without an
+ * account record): a PROVIDER account type with the PATIENT role is an applicant awaiting approval. Use it
+ * for routing only — access is always decided by `role` on the server.
+ */
+export type Session = { email: string; role: BackendRole | (string & {}); accountType?: string | null };
 
 /** Returns the signed-in session, or null when there is none. Other failures throw. */
 export async function getSession(signal?: AbortSignal): Promise<Session | null> {

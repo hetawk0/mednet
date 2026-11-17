@@ -1,4 +1,5 @@
 import type { Page, Request } from "@playwright/test";
+import { filterQueue, pageOf, preferencesStub } from "./paging";
 
 /**
  * In-browser stand-in for the home-care partner API (shape from PartnerRequestDetails), enforcing the
@@ -50,6 +51,7 @@ export async function stubHomeCareApi(page: Page, options: HomeCareStubOptions =
         request(HOME_CARE_IDS.cancelled, "Mobility assistance", "Old Road", "CANCELLED", -100, null),
       ];
   const log: HomeCareStubLog = { requests: [], expireSession: () => (expired = true) };
+  const preferences = preferencesStub();
 
   await page.route("**/api/v1/**", async (route, req: Request) => {
     const url = new URL(req.url());
@@ -71,8 +73,11 @@ export async function stubHomeCareApi(page: Page, options: HomeCareStubOptions =
     if (path.startsWith("/partner") && role !== "HOME_CARE") return route.fulfill(problem(403, "Partner account access is not allowed"));
     if (path === "/partner/service-requests") {
       if (url.searchParams.get("type") !== "HOME_CARE") return route.fulfill(problem(403, "Partner account access is not allowed"));
-      return route.fulfill(json(requests));
+      if (!url.searchParams.has("page")) return route.fulfill(json(requests));
+      const matching = filterQueue(requests, url, (r) => `${r.requestedService} ${r.locationDescription ?? ""}`);
+      return route.fulfill(json(pageOf(matching, url)));
     }
+    if (path === "/notifications/preferences") return route.fulfill(json(preferences(method, body)));
     const match = path.match(/^\/partner\/service-requests\/([^/]+)\/(status|schedule)$/);
     if (match && method === "PATCH") {
       const target = requests.find((r) => r.id === match[1]);

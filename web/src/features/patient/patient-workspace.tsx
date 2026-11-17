@@ -8,7 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { Menu } from "@/components/ui/menu";
 import { ApiRequestError, getSession, signOut, type Session } from "@/lib/api";
 import { providerApi } from "@/features/provider/provider-api";
-import { WORKSPACES, activeNavItemId, homePathForRole } from "@/features/workspace/workspaces";
+import { WORKSPACES, activeNavItemId, homePathForSession } from "@/features/workspace/workspaces";
 import { formatHeaderDate, greeting } from "./format";
 import { SESSION_EXPIRED_EVENT } from "@/features/workspace/use-resource";
 import { WorkspaceAccessState } from "@/features/workspace/access-state";
@@ -79,9 +79,11 @@ export function PatientWorkspace({ children }: { children: ReactNode }) {
       .then((session) => {
         if (signal.aborted) return;
         if (!session) return setAccess({ state: "signed-out" });
-        if (session.role !== "PATIENT") {
+        // Other roles, and provider sign-ups still in onboarding (PATIENT role until approved), go home.
+        const home = homePathForSession(session);
+        if (home !== "/patient") {
           setAccess({ state: "redirecting" });
-          router.replace(homePathForRole(session.role));
+          router.replace(home);
           return;
         }
         setAccess({ state: "ready", session });

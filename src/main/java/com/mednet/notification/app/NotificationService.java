@@ -1,5 +1,6 @@
 package com.mednet.notification.app;
 
+import java.util.regex.Pattern;
 import java.util.UUID;
 import java.util.List;
 
@@ -23,6 +24,9 @@ import com.mednet.notification.data.NotificationRepository;
 @Service
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url")
 public class NotificationService {
+
+    /** Event types are upper-case identifiers such as APPOINTMENT or PROVIDER_APPLICATION. */
+    private static final Pattern EVENT_TYPE = Pattern.compile("[A-Z_]{1,40}");
 
     private final PlatformAccountRepository accounts;
     private final NotificationRepository notifications;
@@ -108,13 +112,28 @@ public class NotificationService {
 
     @Transactional
     public Page<NotificationDetails> list(String email, int page, int size) {
+        return list(email, page, size, null);
+    }
+
+    /**
+     * The signed-in user's notifications, newest first, optionally limited to one event type (for example
+     * {@code PROVIDER_APPLICATION} on the provider onboarding dashboard). Recipient scoping is unchanged.
+     */
+    @Transactional
+    public Page<NotificationDetails> list(String email, int page, int size, String eventType) {
         PlatformAccountEntity account = account(email);
-        return notifications.findByRecipientAccountId(
-                        account.getId(),
-                        Pagination.pageRequest(
-                                page,
-                                size,
-                                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id"))))
+        var pageable = Pagination.pageRequest(
+                page,
+                size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
+        if (eventType == null || eventType.isBlank()) {
+            return notifications.findByRecipientAccountId(account.getId(), pageable)
+                    .map(NotificationService::toDetails);
+        }
+        if (!EVENT_TYPE.matcher(eventType).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown notification event type");
+        }
+        return notifications.findByRecipientAccountIdAndEventType(account.getId(), eventType, pageable)
                 .map(NotificationService::toDetails);
     }
 

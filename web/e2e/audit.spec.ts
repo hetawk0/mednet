@@ -24,6 +24,9 @@ import { inspect, keyboardWalk, settle } from "./support/quality";
 const ROUTES: RegExp[] = [
   /^\/$/,
   /^\/(find-care|about|services|sign-in|reset|verify|account|for-providers|help|contact|privacy|accessibility|terms)$/,
+  /^\/sign-up\/provider$/,
+  // Spring Security's Google authorization endpoint, proxied to the API by next.config rewrites (and LPAD).
+  /^\/oauth2\/authorization\/google$/,
   /^\/patient(\/(find-a-doctor|appointments|appointments\/consultation|messages|records|payments|help|profile))?$/,
   /^\/provider(\/(schedule|appointments|appointments\/consultation|patients|patients\/[^/]+|clinical-work|messages|earnings|help|profile))?$/,
   /^\/admin(\/(users|providers|verification|security|configuration|tasks|appointments|onboarding|escalations|reports))?$/,
@@ -63,7 +66,7 @@ async function stubPublic(page: Page) {
 
 const AREAS: Area[] = [
   { name: "public", stub: stubPublic, paths: ["/", "/find-care", "/find-care?provider=p1", "/about", "/services", "/for-providers", "/privacy", "/no-such-page"] },
-  { name: "account access", stub: stubPublic, paths: ["/sign-in", "/reset", "/verify", "/account"] },
+  { name: "account access", stub: stubPublic, paths: ["/sign-in", "/sign-up/provider", "/reset", "/verify", "/account"] },
   {
     name: "patient",
     stub: (page) => stubPatientApi(page),

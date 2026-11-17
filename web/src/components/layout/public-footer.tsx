@@ -15,8 +15,7 @@ export function PublicFooter() {
       <div className="mx-auto max-w-page px-4 md:px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-x-[1.875rem] gap-y-[1.875rem] md:grid-cols-[1.4fr_1fr_1fr] md:gap-[3.4375rem] lg:grid-cols-[1.5fr_repeat(3,1fr)]">
           <div className="col-span-2 md:col-span-1">
-            {/* The reference sets the wordmark in a 37.5px line box. */}
-            <Wordmark className="py-[0.390625rem]" />
+            <Wordmark size="lg" priority={false} />
             <p className="mt-[1.125rem] text-body text-text-secondary">Professional healthcare access for Liberia.</p>
             <p className="mt-[0.5625rem] text-[0.8rem] leading-[1.2rem] text-text-muted">
               MedNet does not replace emergency services.

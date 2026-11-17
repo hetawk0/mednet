@@ -23,7 +23,9 @@ async function expectComfortableTargets(page: Page) {
   const small = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>("main a, main button, main input:not([type=radio]), main select, header button")]
       .filter((el) => el.offsetParent !== null)
-      .map((el) => ({ text: el.textContent?.trim() || el.getAttribute("aria-label") || el.tagName, h: el.getBoundingClientRect().height }))
+      // A checkbox's target is its wrapping label row (design-system Checkbox: 44px row), not the native box.
+      .map((el) => ({ el, target: (el instanceof HTMLInputElement && el.type === "checkbox" && el.closest("label")) || el }))
+      .map(({ el, target }) => ({ text: el.textContent?.trim() || el.getAttribute("aria-label") || el.tagName, h: target.getBoundingClientRect().height }))
       .filter(({ h }) => h < 40),
   );
   expect(small).toEqual([]);

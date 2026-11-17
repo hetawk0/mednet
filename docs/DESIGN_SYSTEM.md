@@ -176,7 +176,7 @@ Shared layouts (`web/src/components/layout`):
 | `PublicHeader` | Navigation/Public header | **Interpretation:** a menu toggle below 1200px (where the reference hides the four links with no replacement), so navigation and, on phones, Sign in stay reachable. All four reference links are rendered (2026-10-17); "For providers" and "Help" go to placeholder pages (§14.4). Below 1200px the reference left-aligns Sign in/Book beside the wordmark; they stay right-aligned. "Book an appointment" goes to `/find-care`. |
 | `PublicFooter` | Public footer | All reference columns and links are rendered (2026-10-17); links without approved content go to placeholder pages (§14.4). The "Prototype content is fictional" note is dropped on the live site. Bottom padding is 56px, not 95px: the reference's extra space only clears the prototype's floating screen switcher. |
 | `WorkspaceShell` | Navigation/Dashboard sidebar + top bar | **Fixes:** the sidebar is sticky and fills the viewport height. **Responsive adjustment:** a 72px icon rail below 1200px (the reference keeps the full 244px sidebar at 820px, squeezing content). The wordmark is white on the sidebar; the reference's dark-green-on-dark-green patient wordmark fails contrast. The prototype's "Switch workspace" select is not built, because the backend gives each account one role. |
-| `Wordmark` | MedNet logotype | Text wordmark only; "M" in the collapsed rail. Dark tone is green-900 with −0.04em (−1px) tracking, as measured in the public header and footer (2026-10-17). |
+| `Wordmark` | MedNet logotype | Official artwork since 2026-11-17 (§ Brand assets): full-colour logo on light surfaces, reversed logo in the expanded sidebar, the official favicon mark on a 40px white tile in the collapsed rail (its dark teal stroke is 1.3:1 on the sidebar green). The link keeps the name "MedNet home"; the image is decorative (`alt=""`). Heights: public header 28px on phones / 40px from 768px; footer and sidebar 40px; auth pages 32/40px; session screens 32px. Replaced the earlier text wordmark (green-900, −0.04em). |
 | `FictionalDataBadge` | "Fictional data" chip | Required on every presentation-only screen. |
 
 ## 11. Presentation-only data convention
@@ -678,7 +678,7 @@ operations workspaces).
 | Access-principle titles (permissions matrix) | 15px/400 | 21px | 15px/400 |
 | Collection agent: "Next pickup", place, "Confirm arrival" | 16/700, 19/400, 18/400 | 14/700, 21/400, 21/400 | as reference |
 | Public header "Sign in" and "Book an appointment" | 15px/700 | 14px/600 | 15px/700 (button token) |
-| Wordmark | 25px | 22px | 25px |
+| Wordmark | 25px | 22px | 25px text until 2026-11-17; now the official logo image (see `Wordmark`) |
 | Desktop table cells | vertically centred | top-aligned (row text sat above the centred badges and buttons) | centred |
 
 `e2e/fidelity.spec.ts` now also asserts the row-title, audit-title and table-alignment values. The other
@@ -688,3 +688,32 @@ and the 15px button token.
 
 **Documentation correction.** §12.1 said the card kicker matched the reference's 12px; it is 11px, one token
 covering the reference's 12px (dashboards) and 10px (operations).
+
+## Brand assets (2026-11-17)
+
+The official masters live in `web/public/images/` and are never edited: `MedNet-Logo.png` (full colour),
+`MedNeT_Reversed_Logo.png` (for dark backgrounds) and `MedNeT_Favicon.png` (the "M" mark). The logos are
+3990×1140 RGBA with the artwork at x 149–3658, y 132–991; the favicon is 2200×1520 with the artwork at
+x 215–2064, y 142–1360. `web/scripts/brand-assets.mjs` derives the served copies with `sharp` (installed by
+Next.js): it crops the uneven transparent padding, resizes, and changes nothing else.
+
+| Derived file | Use | Size |
+|---|---|---|
+| `public/brand/mednet-logo.webp` | Header, footer, auth and session screens | 490×120 lossless WebP |
+| `public/brand/mednet-logo-reversed.webp` | Expanded workspace sidebar | 490×120 lossless WebP |
+| `public/brand/mednet-mark.webp` | Collapsed sidebar rail (on a white tile) | 146×96 lossless WebP |
+| `src/app/favicon.ico` | Browser tab | 16, 32 and 48px PNG entries |
+| `src/app/icon.png` | Browser and app icon | 512×512, transparent |
+| `src/app/apple-icon.png` | Apple touch icon | 180×180 on white (iOS fills transparency with black) |
+
+Square icons centre the favicon artwork with transparent padding. Re-run the script if a master changes.
+**Decisions (owner, 2026-11-17):** "MedNet" is the official product name in application text and
+documentation; the official artwork keeps its stylised "MedNeT" lettering. The artwork is not redesigned,
+and application colours and typography stay as they are.
+
+**Possible future branding improvements (not scheduled):**
+
+- A favicon drawn for small sizes: at 16px the dark teal stroke is faint on dark browser tabs (the green
+  "M" and swoosh still read).
+- A logo variant without the heartbeat line for small sizes: the line blurs at 28–32px tall.
+- A dark mode, if added, can use the reversed logo.

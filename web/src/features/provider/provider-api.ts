@@ -131,6 +131,12 @@ export const providerApi = {
 
   notifications: (page = 0, size = 10, signal?: Signal) =>
     apiRequest<Page<Notification>>("/notifications", { query: { page, size }, signal }),
+  /**
+   * Review decisions on this account's provider application (`eventType=PROVIDER_APPLICATION`): generic
+   * titles only, no reviewer notes. Readable with the PATIENT role, so applicants see them on onboarding.
+   */
+  applicationUpdates: (signal?: Signal) =>
+    apiRequest<Page<Notification>>("/notifications", { query: { page: 0, size: 10, eventType: "PROVIDER_APPLICATION" }, signal }),
   unreadCount: (signal?: Signal) => apiRequest<number>("/notifications/unread-count", { signal }),
   markNotificationRead: (notificationId: string) =>
     apiRequest<Notification>(`/notifications/${id(notificationId)}/read`, { method: "PATCH" }),

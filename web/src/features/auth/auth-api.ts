@@ -17,11 +17,19 @@ export async function signIn(email: string, password: string): Promise<Session |
   return getSession();
 }
 
-/** Register a MedNet account and send its verification code through EKDSend. */
-export async function register(email: string, password: string): Promise<MessageResponse> {
+/**
+ * Register a MedNet account and send its verification code through EKDSend. Patient sign-up omits the
+ * account type (the API defaults to PATIENT); provider sign-up sends PROVIDER. A PROVIDER account still
+ * signs in with patient access until an administrator approves its provider application.
+ */
+export async function register(
+  email: string,
+  password: string,
+  accountType?: "PROVIDER",
+): Promise<MessageResponse> {
   return apiRequest<MessageResponse>("/auth/register", {
     method: "POST",
-    body: { email, password },
+    body: accountType ? { email, password, accountType } : { email, password },
   });
 }
 

@@ -14,7 +14,7 @@ export default function SignInPage() {
     <AuthShell
       eyebrow="Secure access"
       title="Sign in securely."
-      description="Sign in with your MedNet account or create a new account. New accounts start with patient access; provider access requires approval."
+      description="Sign in with your MedNet account or create a new patient account. Healthcare providers sign up separately, and provider access opens after an administrator approves the application."
     >
       <SignInPanel />
     </AuthShell>

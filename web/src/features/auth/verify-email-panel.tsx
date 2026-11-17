@@ -90,7 +90,7 @@ export function VerifyEmailPanel() {
         <StateMessage
           kind="success"
           title="Email verified"
-          description="Your email address is confirmed. You can now continue to MedNet."
+          description="Your email address is confirmed. Sign in to continue; provider accounts continue with their application."
         />
       ) : (
         <>

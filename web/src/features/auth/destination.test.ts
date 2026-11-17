@@ -30,6 +30,15 @@ describe("destinationAfterSignIn", () => {
     expect(destinationAfterSignIn("HOME_CARE", "", origin)).toBe("/home-care");
   });
 
+  it("sends provider sign-ups awaiting approval to onboarding, and approved providers to their workspace", () => {
+    expect(destinationAfterSignIn("PATIENT", "", origin, "PROVIDER")).toBe("/provider");
+    expect(destinationAfterSignIn("PATIENT", "", origin, "PATIENT")).toBe("/patient");
+    expect(destinationAfterSignIn("PATIENT", "", origin, null)).toBe("/patient");
+    expect(destinationAfterSignIn("PROVIDER", "", origin, "PROVIDER")).toBe("/provider");
+    // The account type never upgrades access: an admin stays an admin, whatever is stored.
+    expect(destinationAfterSignIn("ADMIN", "", origin, "PROVIDER")).toBe("/admin");
+  });
+
   it("honours a safe redirect", () => {
     expect(destinationAfterSignIn("ADMIN", "?redirect=%2Fadmin", origin)).toBe("/admin");
     expect(destinationAfterSignIn("PATIENT", "?redirect=%2F%2Fevil.example", origin)).toBe("/patient");

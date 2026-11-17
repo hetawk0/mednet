@@ -78,9 +78,12 @@ export function SignInPanel() {
             sessionResult.value.role,
             window.location.search,
             window.location.origin,
+            sessionResult.value.accountType,
           ));
           return;
         }
+        // `?mode=register` opens patient sign-up directly (linked from provider sign-up).
+        if (params.get("mode") === "register") setMode("register");
         if (googleResult.status === "fulfilled") {
           setGoogleEnabled(googleResult.value);
         } else {
@@ -129,7 +132,7 @@ export function SignInPanel() {
       if (mode === "login") {
         const session = await signIn(trimmed, password);
         if (!session) throw new Error("Sign-in succeeded, but your account could not be loaded. Refresh to continue.");
-        goTo(destinationAfterSignIn(session.role, window.location.search, window.location.origin));
+        goTo(destinationAfterSignIn(session.role, window.location.search, window.location.origin, session.accountType));
         return;
       }
       if (mode === "register") {
@@ -197,7 +200,12 @@ export function SignInPanel() {
         <h2 className="text-title text-ink">{headings[mode]}</h2>
         {mode === "register" ? (
           <p className="mt-1 text-data text-text-secondary">
-            New accounts start with patient access. Provider access requires approval.
+            This creates a patient account for booking and managing your care. Doctors and other healthcare
+            professionals should{" "}
+            <Link href="/sign-up/provider" className="rounded-sm font-semibold text-green-800 underline-offset-2 hover:underline">
+              sign up as a healthcare provider
+            </Link>
+            .
           </p>
         ) : null}
         {mode === "resend" ? (

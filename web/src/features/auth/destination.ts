@@ -1,4 +1,4 @@
-import { homePathForRole } from "@/features/workspace/workspaces";
+import { homePathForSession } from "@/features/workspace/workspaces";
 
 /**
  * Where to send a user after sign-in: the `?redirect=` target when it is a safe same-origin
@@ -19,7 +19,13 @@ export function safeDestination(redirect: string | null, fallback: string, origi
   return `${requested.pathname}${requested.search}${requested.hash}`;
 }
 
-export function destinationAfterSignIn(role: string, search: string, origin: string): string {
+/** `accountType` (from the session) only chooses the landing page; it never grants access. */
+export function destinationAfterSignIn(
+  role: string,
+  search: string,
+  origin: string,
+  accountType?: string | null,
+): string {
   const redirect = new URLSearchParams(search).get("redirect");
-  return safeDestination(redirect, homePathForRole(role), origin);
+  return safeDestination(redirect, homePathForSession({ role, accountType }), origin);
 }

@@ -23,7 +23,7 @@ export function PublicHeader() {
   return (
     <header className="border-b border-line-soft bg-surface/95">
       <div className="mx-auto flex h-[4.3125rem] max-w-page items-center px-4 md:h-[5.0625rem] md:px-6 lg:px-8">
-        <Wordmark />
+        <Wordmark size="header" />
 
         <nav aria-label="Main" className="ml-[2.625rem] hidden lg:block">
           <ul className="flex items-center gap-7">
@@ -41,7 +41,7 @@ export function PublicHeader() {
           </ul>
         </nav>
 
-        <div className="ml-auto flex items-center gap-2.5">
+        <div className="ml-auto flex items-center gap-2.5 pl-3">
           <Link
             href="/sign-in"
             className="hidden min-h-11 items-center rounded-sm px-5 text-button font-bold text-green-800 hover:bg-action-subtle md:inline-flex"

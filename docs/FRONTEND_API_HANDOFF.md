@@ -146,6 +146,38 @@ schemas, status codes, and parameters. The current guarded MVP includes:
 - `GET /api/v1/conversations?page=&size=` and `GET /api/v1/patients/me/record-consents?page=&size=` return paginated histories (default size 25, maximum 100). Omitting `page` preserves the existing list responses; conversation pages include only current eligible care relationships.
 - Provider pending laboratory results for a patient accept optional `page` and `size` (default 25, maximum 100); the existing unpaged response shape remains available. Record-consent and care-relationship checks apply to both forms.
 - Provider applications, approved-provider directory, availability, and appointments.
+- Provider sign-up and onboarding: `/sign-up/provider` registers with `POST /api/v1/auth/register`
+  and `"accountType":"PROVIDER"`, then uses the normal email verification. After sign-in,
+  `GET /api/v1/auth/session` reports `role: "PATIENT"` with `accountType: "PROVIDER"` until approval;
+  the client routes that combination to `/provider`, which shows onboarding: the details form
+  (`POST /api/v1/providers/applications`) when `GET /api/v1/providers/me/application` is 404, otherwise
+  the pending-provider dashboard (`PENDING`, `REJECTED` with a corrected application, `SUSPENDED`,
+  `APPROVED`). `PENDING`, `APPROVED` and `SUSPENDED` applications block another submission (`409`);
+  a rejected applicant may submit a new one. Every review decision ends the applicant's sessions, so
+  approval takes effect at the next sign-in. Provider endpoints stay `PROVIDER`-only on the server;
+  `accountType` never grants access.
+- `GET /api/v1/notifications` accepts an optional `eventType` (upper-case identifier, for example
+  `PROVIDER_APPLICATION`; anything else returns `400`) and stays scoped to the signed-in recipient.
+  The onboarding dashboard lists `PROVIDER_APPLICATION` decisions (generic titles, no reviewer notes)
+  and marks them read with `PATCH /api/v1/notifications/{id}/read`, so applicants do not need the
+  patient workspace. Approvals and rejections create these notices; suspensions do not, so the
+  dashboard also shows the authoritative status from `GET /api/v1/providers/me/application`. When a
+  session ends during onboarding, the client explains that a review decision signs applicants out
+  and links back to `/sign-in?redirect=/provider`.
+- Pending-provider access (decided 2026-11-17, Option A, initial release): applicants awaiting a
+  decision see the onboarding dashboard as their default experience, and the web client does not offer
+  the patient workspace to them. This is a frontend navigation restriction only, not a server-side
+  denial: applicants hold the `PATIENT` role until approval, so patient API endpoints still accept
+  their requests. Roles are single-valued: after approval the account signs in as `PROVIDER` only, so
+  any patient data created from that account while pending would become unreachable from it. Anyone
+  who needs care should use a separate patient account. Multi-role accounts, opening the patient
+  workspace to applicants, and a server-side applicant role are deferred and need separate approval.
+- Rejection reasons (deferred 2026-11-17): rejection and resubmission work as described above, and no
+  reason is recorded or shown. A future enhancement would add an applicant-visible explanation kept
+  separate from confidential internal administrative notes; internal notes must never reach the
+  applicant or notifications. Not built; needs a migration and separate approval.
+- Support contact details: none are shown in onboarding or elsewhere until official MedNet contact
+  information is provided; `/contact` remains a placeholder. Do not add invented addresses or numbers.
 - In-app appointment reminders for both participants, generated within 24 hours and again within 1 hour of a confirmed appointment. These reminders are idempotent. Email delivery is enabled through account preferences and sends privacy-safe generic notices (appointment status/time only); SMS and push delivery remain out of scope.
 - Participant-only text conversations associated with confirmed appointments. Providers can record one text consultation outcome with `PUT /api/v1/consultations/{id}/outcome` after ending the session; the backend appends an `ENCOUNTER_SUMMARY` only when the existing patient consent and care-relationship checks pass. The end-session endpoint remains backward compatible.
 - Patient home-care and laboratory requests, assigned partner work queues, and laboratory result review/release.

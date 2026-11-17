@@ -46,7 +46,11 @@ test("Google sign-in reports the deployment status from the API", async ({ page 
   const status = await page.request.get("/api/v1/auth/google/status").then((r) => r.json());
   await page.goto("/sign-in");
   if (status.enabled) await expect(page.getByRole("link", { name: "Continue with Google" })).toBeVisible();
-  else await expect(page.getByText("Google sign-in is not configured for this deployment yet.")).toBeVisible();
+  else {
+    // Without Google configured, sign-in offers email and password only (no Google link or notice).
+    await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Continue with Google" })).toHaveCount(0);
+  }
 });
 
 test("registration creates the account and surfaces the API's email-delivery result", async ({ page }) => {
@@ -83,20 +87,22 @@ test("an unverified account cannot sign in and is offered a new verification ema
 });
 
 test("a broken or forged verification link is rejected by the API", async ({ page }) => {
+  // Without a link token the page offers the six-digit code form instead.
   await page.goto("/verify");
-  await expect(page.getByText("This verification link is incomplete.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("form", { name: "Verify your email" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Six-digit verification code" })).toBeVisible();
 
   await page.goto(`/verify?email=${encodeURIComponent(patientEmail)}&token=${"A".repeat(43)}`);
-  await expect(page.getByText("We could not verify this link", { exact: true })).toBeVisible();
-  await expect(page.getByText("Verification link is invalid or expired", { exact: false })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Verification link is invalid or expired" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Email address" })).toHaveValue(patientEmail);
+  await expect(page.getByRole("status").filter({ hasText: "Email verified" })).toHaveCount(0);
 });
 
 test("the emailed verification link verifies the account", async ({ page }) => {
   test.skip(!canDeliverEmailTokens, "needs a disposable database (MEDNET_LIVE_H2_URL or MEDNET_LIVE_PG_URL)");
   const token = deliverVerificationToken(patientEmail);
   await page.goto(`/verify?email=${encodeURIComponent(patientEmail)}&token=${token}`);
-  await expect(page.getByText("Email verified", { exact: true })).toBeVisible();
-  await expect(page.getByText("Email verified. You can now sign in.")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Your email address is confirmed." })).toBeVisible();
   await page.getByRole("link", { name: "Continue to sign in" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
 });
@@ -112,7 +118,7 @@ test("a patient signs in, honours a safe redirect, and is kept off the sign-in p
   await expect(page).toHaveURL(/\/patient\/profile$/);
 
   const session = await page.request.get("/api/v1/auth/session").then((r) => r.json());
-  expect(session).toEqual({ email: patientEmail, role: "PATIENT" });
+  expect(session).toEqual({ email: patientEmail, role: "PATIENT", accountType: "PATIENT" });
 
   await page.goto("/sign-in?redirect=%2F%2Fevil.example");
   await expect(page).toHaveURL(/\/patient$/);
@@ -140,7 +146,7 @@ test("password reset by emailed code: wrong code, right code, new password", asy
   await page.goto("/sign-in");
   await page.getByRole("button", { name: "Forgot password?" }).click();
   await page.getByLabel("Email address").fill(patientEmail);
-  await page.getByRole("button", { name: "Send recovery code" }).click();
+  await page.getByRole("button", { name: "Send recovery instructions" }).click();
   await expect(page.getByRole("status").filter({ hasText: "password reset instructions" })).toBeVisible();
   await page.getByRole("link", { name: "Enter your recovery code" }).click();
   await expect(page).toHaveURL(/\/reset\?email=/);

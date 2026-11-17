@@ -41,18 +41,56 @@ function runSql(sql: string) {
   });
 }
 
-function runPostgresSql(sql: string) {
-  const match = /^jdbc:(postgresql:\/\/[^/?]+\/([A-Za-z0-9_]+)(\?.*)?)$/.exec(pgUrl ?? "");
+/**
+ * The psql connection URI for MEDNET_LIVE_PG_URL, after checking it is a disposable database on this
+ * machine: the name must end in `_test` and the host must be localhost unless
+ * MEDNET_LIVE_PG_ALLOW_REMOTE=1 (hosted databases are never used for these runs by default).
+ */
+function postgresTarget(): string {
+  const match = /^jdbc:(postgresql:\/\/([^/?]+)\/([A-Za-z0-9_]+)(\?.*)?)$/.exec(pgUrl ?? "");
   if (!match) throw new Error("MEDNET_LIVE_PG_URL must be a jdbc:postgresql://host:port/database URL");
-  if (!match[2].endsWith("_test")) throw new Error("Only a disposable PostgreSQL database whose name ends in _test is supported");
+  if (!match[3].endsWith("_test")) throw new Error("Only a disposable PostgreSQL database whose name ends in _test is supported");
+  const hosts = match[2].split(",").map((address) => (address.startsWith("[") ? address.slice(1, address.indexOf("]")) : address.replace(/:\d+$/, "")));
+  const remote = hosts.filter((host) => !["localhost", "127.0.0.1", "::1"].includes(host.toLowerCase()));
+  if (remote.length && process.env.MEDNET_LIVE_PG_ALLOW_REMOTE !== "1") {
+    throw new Error(`Refusing the PostgreSQL host ${remote.join(", ")}: only localhost is allowed unless MEDNET_LIVE_PG_ALLOW_REMOTE=1`);
+  }
+  return match[1];
+}
+
+function runPostgresSql(sql: string) {
   // The password travels in the child's environment, never on the command line.
-  execFileSync(process.env.MEDNET_LIVE_PSQL ?? "psql", ["-X", "-w", "-q", "-v", "ON_ERROR_STOP=1", "-U", pgUser!, "-d", match[1], "-c", sql], {
+  execFileSync(process.env.MEDNET_LIVE_PSQL ?? "psql", ["-X", "-w", "-q", "-v", "ON_ERROR_STOP=1", "-U", pgUser!, "-d", postgresTarget(), "-c", sql], {
     stdio: "pipe",
     env: { ...process.env, PGPASSWORD: pgPassword },
   });
 }
 
+/**
+ * Reads rows from the same disposable database (SELECT only), for checks the API does not expose,
+ * such as which account an email outbox entry is addressed to. Each row is its columns as strings.
+ */
+export function queryRows(sql: string): string[][] {
+  if (!/^\s*select\s/i.test(sql)) throw new Error("queryRows only runs SELECT statements");
+  if (usePostgres) {
+    const out = execFileSync(process.env.MEDNET_LIVE_PSQL ?? "psql", ["-X", "-w", "-q", "-A", "-t", "-F", "|", "-v", "ON_ERROR_STOP=1", "-U", pgUser!, "-d", postgresTarget(), "-c", sql], {
+      stdio: "pipe",
+      env: { ...process.env, PGPASSWORD: pgPassword },
+    }).toString("utf8");
+    return out.split(/\r?\n/).filter(Boolean).map((line) => line.split("|"));
+  }
+  if (!h2Url || !h2Jar) throw new Error("MEDNET_LIVE_H2_URL and MEDNET_LIVE_H2_JAR are required");
+  if (!h2Url.startsWith("jdbc:h2:")) throw new Error("Only a disposable H2 database is supported");
+  const out = execFileSync("java", ["-cp", h2Jar, "org.h2.tools.Shell", "-url", h2Url, "-user", "sa", "-password", "", "-sql", sql], {
+    stdio: "pipe",
+  }).toString("utf8");
+  // H2 prints a header row, the data rows, then "(n rows, t ms)".
+  const lines = out.split(/\r?\n/).filter((line) => line.trim() && !line.startsWith("("));
+  return lines.slice(1).map((line) => line.split("|").map((cell) => cell.trim()));
+}
+
 const sqlString = (value: string) => `'${value.replaceAll("'", "''")}'`;
+export const sqlLiteral = sqlString;
 
 const inFuture = (amount: number, unit: "HOUR" | "MINUTE") =>
   usePostgres ? `CURRENT_TIMESTAMP + INTERVAL '${amount} ${unit}'` : `DATEADD('${unit}', ${amount}, CURRENT_TIMESTAMP)`;

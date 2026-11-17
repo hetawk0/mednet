@@ -66,7 +66,7 @@ export function WorkspaceShell({
             <Wordmark tone="light" compact />
           </span>
           <span className="hidden lg:inline">
-            <Wordmark tone="light" />
+            <Wordmark tone="light" size="lg" />
           </span>
         </div>
 

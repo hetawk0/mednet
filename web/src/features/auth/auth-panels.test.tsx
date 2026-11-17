@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountPanel } from "./account-panel";
+import { ProviderSignUpPanel } from "./provider-sign-up-panel";
 import { ResetPasswordPanel } from "./reset-password-panel";
 import { SignInPanel } from "./sign-in-panel";
 import { VerifyEmailPanel } from "./verify-email-panel";
@@ -69,6 +70,27 @@ describe("SignInPanel", () => {
     render(<SignInPanel />);
     expect(await screen.findByRole("link", { name: "Continue with Google" }))
       .toHaveAttribute("href", "/oauth2/authorization/google");
+  });
+
+  it("sends a provider sign-up awaiting approval to onboarding, using the session's account type", async () => {
+    on("GET", "/api/v1/auth/session", unauthenticated, {
+      status: 200,
+      body: { email: "doctor@b.lr", role: "PATIENT", accountType: "PROVIDER" },
+    });
+    on("POST", "/api/v1/auth/login", { status: 204 });
+    render(<SignInPanel />);
+    await userEvent.type(await screen.findByRole("textbox", { name: /Email address/ }), "doctor@b.lr");
+    await userEvent.type(screen.getByLabelText(/^Password/), "a-valid-password-123");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/provider"));
+  });
+
+  it("opens patient sign-up directly from ?mode=register", async () => {
+    window.location.search = "?mode=register";
+    on("GET", "/api/v1/auth/session", unauthenticated);
+    render(<SignInPanel />);
+    expect(await screen.findByRole("heading", { name: "Create a patient account" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "sign up as a healthcare provider" })).toHaveAttribute("href", "/sign-up/provider");
   });
 
   it("validates fields before attempting API authentication", async () => {
@@ -260,7 +282,10 @@ describe("VerifyEmailPanel", () => {
     await userEvent.type(codeInput, "123456");
     await userEvent.click(screen.getByRole("button", { name: "Verify email" }));
 
-    expect(await screen.findByText("Your email address is confirmed. You can now continue to MedNet.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Your email address is confirmed. Sign in to continue; provider accounts continue with their application."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue to sign in" })).toHaveAttribute("href", "/sign-in");
     const verifyCall = calls.find((call) => call.url === "/api/v1/auth/verify-code");
     expect(JSON.parse(String(verifyCall?.init?.body))).toEqual({ email: "p@b.lr", code: "123456" });
   });
@@ -302,7 +327,10 @@ describe("VerifyEmailPanel", () => {
     });
     render(<VerifyEmailPanel />);
 
-    expect(await screen.findByText("Your email address is confirmed. You can now continue to MedNet.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Your email address is confirmed. Sign in to continue; provider accounts continue with their application."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue to sign in" })).toHaveAttribute("href", "/sign-in");
     expect(calls.some((call) => call.url.startsWith("/api/v1/auth/verify?email=p%40b.lr"))).toBe(true);
   });
 });
@@ -362,5 +390,58 @@ describe("AccountPanel", () => {
     render(<AccountPanel />);
     expect(await screen.findByRole("alert")).toHaveTextContent("The MedNet API is unavailable. Try again shortly.");
     expect(screen.getByRole("link", { name: "Go to sign in" })).toBeInTheDocument();
+  });
+});
+
+describe("ProviderSignUpPanel", () => {
+  async function fillAndSubmit(email = "doctor@b.lr", password = "a-valid-password-123") {
+    if (email) await userEvent.type(await screen.findByRole("textbox", { name: /Professional email address/ }), email);
+    if (password) await userEvent.type(screen.getByLabelText(/^Password/), password);
+    await userEvent.click(screen.getByRole("button", { name: "Create provider account" }));
+  }
+
+  it("registers a PROVIDER account through the same endpoint and opens email verification", async () => {
+    on("GET", "/api/v1/auth/session", unauthenticated);
+    on("POST", "/api/v1/auth/register", { status: 202, body: { message: "Check your email." } });
+    render(<ProviderSignUpPanel />);
+    await fillAndSubmit();
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/verify?email=doctor%40b.lr"));
+    const registerCall = calls.find((call) => call.url === "/api/v1/auth/register");
+    expect(JSON.parse(String(registerCall?.init?.body))).toEqual({
+      email: "doctor@b.lr",
+      password: "a-valid-password-123",
+      accountType: "PROVIDER",
+    });
+  });
+
+  it("validates the email and password before calling the API", async () => {
+    on("GET", "/api/v1/auth/session", unauthenticated);
+    render(<ProviderSignUpPanel />);
+    await screen.findByRole("textbox", { name: /Professional email address/ });
+    await fillAndSubmit("", "short");
+    expect(screen.getByRole("textbox", { name: /Professional email address/ })).toHaveFocus();
+    expect(calls.some((call) => call.url === "/api/v1/auth/register")).toBe(false);
+  });
+
+  it("sends an existing account back to sign-in to continue its application instead of registering again", async () => {
+    on("GET", "/api/v1/auth/session", unauthenticated);
+    on("POST", "/api/v1/auth/register", {
+      status: 409,
+      body: { success: false, error: { code: "CONFLICT", message: "An account with this email already exists." } },
+    });
+    render(<ProviderSignUpPanel />);
+    await fillAndSubmit("existing@b.lr");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("An account with this email already exists.");
+    expect(screen.getByRole("link", { name: "Sign in to continue" })).toHaveAttribute("href", "/sign-in?redirect=%2Fprovider");
+    expect(screen.getByRole("link", { name: "Reset password" })).toHaveAttribute("href", "/reset?email=existing%40b.lr");
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it("continues an already signed-in applicant's onboarding instead of offering a second account", async () => {
+    on("GET", "/api/v1/auth/session", { status: 200, body: { email: "doctor@b.lr", role: "PATIENT", accountType: "PROVIDER" } });
+    render(<ProviderSignUpPanel />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/provider"));
   });
 });

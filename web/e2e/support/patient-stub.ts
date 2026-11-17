@@ -1,4 +1,5 @@
 import type { Page, Request } from "@playwright/test";
+import { filterQueue, pageOf, preferencesStub } from "./paging";
 
 /**
  * In-browser stand-in for the patient APIs, shaped like the Spring records in
@@ -155,6 +156,7 @@ export async function stubPatientApi(
     }
   }
   const log: StubLog = { requests: [] };
+  const preferences = preferencesStub();
 
   options = { ...options };
   await page.route("**/api/v1/**", async (route, request: Request) => {
@@ -251,13 +253,20 @@ export async function stubPatientApi(
       (item as { readAt: string | null }).readAt = iso(0);
       return route.fulfill(json(item));
     }
-    if (path === "/lab-requests" && method === "GET") return route.fulfill(json(data.labRequests));
+    const searchable = (r: { requestedService: string; locationDescription: string | null }) => `${r.requestedService} ${r.locationDescription ?? ""}`;
+    if (path === "/lab-requests" && method === "GET") {
+      if (!url.searchParams.has("page")) return route.fulfill(json(data.labRequests));
+      return route.fulfill(json(pageOf(filterQueue(data.labRequests, url, searchable), url)));
+    }
     if (path === "/lab-requests" && method === "POST") {
       const created = { id: `req-${Date.now()}`, requestType: "LABORATORY", requestedService: body.testDescription, locationDescription: null, status: "OPEN", scheduledAt: null, createdAt: iso(0), updatedAt: iso(0) };
       data.labRequests.push(created);
       return route.fulfill(json(created));
     }
-    if (path === "/home-care-requests" && method === "GET") return route.fulfill(json(data.homeCare));
+    if (path === "/home-care-requests" && method === "GET") {
+      if (!url.searchParams.has("page")) return route.fulfill(json(data.homeCare));
+      return route.fulfill(json(pageOf(filterQueue(data.homeCare, url, searchable), url)));
+    }
     const cancelMatch = path.match(/^\/(home-care|lab)-requests\/([^/]+)\/cancel$/);
     if (cancelMatch) {
       const list = cancelMatch[1] === "lab" ? data.labRequests : data.homeCare;
@@ -280,7 +289,11 @@ export async function stubPatientApi(
       data.consents = [consent];
       return route.fulfill(json(consent));
     }
-    if (path === "/patients/me/medications" && method === "GET") return route.fulfill(json(data.medications));
+    if (path === "/patients/me/medications" && method === "GET") {
+      return route.fulfill(json(url.searchParams.has("page") ? pageOf(data.medications, url) : data.medications));
+    }
+    if (/^\/patients\/me\/medications\/[^/]+\/dose-logs$/.test(path) && method === "GET") return route.fulfill(json(pageOf([], url)));
+    if (path === "/notifications/preferences") return route.fulfill(json(preferences(method, body)));
     if (path === "/patients/me/vitals" && method === "GET") return route.fulfill(json(page0(data.vitals)));
     if (path === "/conversations" && method === "GET") return route.fulfill(json(data.conversations));
     const messagesMatch = path.match(/^\/conversations\/([^/]+)\/messages$/);

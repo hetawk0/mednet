@@ -67,6 +67,16 @@ session cookie. It does not store session credentials in browser storage. State-
 obtain a CSRF token from `GET /api/v1/auth/csrf` and send it with the header named in the response.
 Account roles and statuses come from the MedNet database and are never accepted from browser input.
 
+`GET /api/v1/auth/session` returns `{ email, role, accountType }`. `role` is the effective role the
+API enforces; `accountType` is the stored account type (null without an account record). Registration
+accepts an optional `accountType` of `PATIENT` (the default) or `PROVIDER`. A `PROVIDER` account signs
+in with the `PATIENT` role until an administrator approves its provider application, so the web
+client uses `accountType` only to route such applicants to provider onboarding (`/provider`), never as
+proof of approval. Keeping applicants out of the patient workspace is a client navigation choice
+(decided 2026-11-17), not a server-side denial: patient endpoints still accept the `PATIENT` role.
+Any change to a provider application's status (approve, reject, suspend) ends that
+account's sessions, so the new role applies from the next sign-in.
+
 Email/password sign-in requires a corresponding MedNet account and a local password. Google sign-in
 can be used to link an existing account with the same verified Google email. Existing external
 identity data is not migrated automatically.

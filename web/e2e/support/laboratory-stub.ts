@@ -1,4 +1,5 @@
 import type { Page, Request } from "@playwright/test";
+import { filterQueue, pageOf, preferencesStub } from "./paging";
 
 /**
  * In-browser stand-in for the laboratory partner API (shapes from PartnerRequestDetails and
@@ -58,6 +59,7 @@ export async function stubLaboratoryApi(page: Page, options: LaboratoryStubOptio
   for (const id of options.returnedOnServer ?? []) addResult(id, "RETURNED", 6);
   for (const id of options.pendingOnServer ?? []) addResult(id, "PENDING_REVIEW", 2);
   const log: LaboratoryStubLog = { requests: [], expireSession: () => (expired = true) };
+  const preferences = preferencesStub();
 
   await page.route("**/api/v1/**", async (route, req: Request) => {
     const url = new URL(req.url());
@@ -92,15 +94,15 @@ export async function stubLaboratoryApi(page: Page, options: LaboratoryStubOptio
     if (path === "/partner/service-requests") {
       if (url.searchParams.get("type") !== "LABORATORY") return route.fulfill(problem(403, "Partner account access is not allowed"));
       // Each order carries its newest result's review state (Phase 5D), as the API does.
-      return route.fulfill(
-        json(
-          requests.map((request) => {
-            const latest = results.find((result) => result.requestId === request.id);
-            return { ...request, latestResult: latest ? { id: latest.id, status: latest.status, createdAt: latest.createdAt, reviewedAt: latest.reviewedAt } : null };
-          }),
-        ),
-      );
+      const withResults = requests.map((request) => {
+        const latest = results.find((result) => result.requestId === request.id);
+        return { ...request, latestResult: latest ? { id: latest.id, status: latest.status, createdAt: latest.createdAt, reviewedAt: latest.reviewedAt } : null };
+      });
+      if (!url.searchParams.has("page")) return route.fulfill(json(withResults));
+      const matching = filterQueue(withResults, url, (r) => `${r.requestedService} ${r.locationDescription ?? ""}`);
+      return route.fulfill(json(pageOf(matching, url)));
     }
+    if (path === "/notifications/preferences") return route.fulfill(json(preferences(method, body)));
     const match = path.match(/^\/partner\/service-requests\/([^/]+)\/(status|lab-result)$/);
     if (match) {
       const target = requests.find((r) => r.id === match[1]);

@@ -322,6 +322,19 @@ export function homePathForRole(role: string): string {
   }
 }
 
+/**
+ * A provider sign-up still awaiting approval: the account type is PROVIDER but the API grants only the
+ * PATIENT role until an administrator approves the application. Routing only, never an access decision.
+ */
+export function isProviderApplicant(session: { role: string; accountType?: string | null }): boolean {
+  return session.role === "PATIENT" && session.accountType === "PROVIDER";
+}
+
+/** Where a signed-in user lands: provider applicants go to their onboarding in the doctor workspace. */
+export function homePathForSession(session: { role: string; accountType?: string | null }): string {
+  return isProviderApplicant(session) ? "/provider" : homePathForRole(session.role);
+}
+
 /** Longest-prefix match so `/patient/records/1` activates "Medical information", not "Overview". */
 export function activeNavItemId(
   workspace: WorkspaceDefinition,

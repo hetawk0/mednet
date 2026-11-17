@@ -148,8 +148,14 @@ public class AdminWorkflowService {
         ProviderApplicationEntity entity = providers.findByIdForUpdate(id)
                 .orElseThrow(() -> notFound("Provider application"));
         String nextStatus = requireStatus(status, PROVIDER_STATUSES);
+        String previousStatus = entity.getStatus();
         entity.review(nextStatus, actor);
         audit(actor, "provider." + nextStatus.toLowerCase(Locale.ROOT), "provider", id);
+        if (!nextStatus.equals(previousStatus)) {
+            // The PROVIDER role is resolved at sign-in from the application status, so a review decision
+            // ends the applicant's sessions and the new access applies from their next sign-in.
+            sessions.endAll(entity.getEmail());
+        }
         if ("APPROVED".equals(nextStatus) || "REJECTED".equals(nextStatus)) {
             accounts.findFirstByEmailIgnoreCase(entity.getEmail())
                     .filter(account -> "ACTIVE".equals(account.getStatus()))

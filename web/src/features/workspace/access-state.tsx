@@ -83,7 +83,7 @@ export function WorkspaceAccessState({
     <div className="flex min-h-dvh flex-col bg-canvas">
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex h-16 max-w-page items-center px-4 md:px-6 lg:px-8">
-          <Wordmark />
+          <Wordmark size="sm" />
         </div>
       </header>
       <main id="main-content" className="mx-auto w-full max-w-2xl flex-1 px-4 py-12 md:py-16">

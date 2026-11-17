@@ -81,7 +81,7 @@ Current route organisation (Phase 2, URLs unchanged):
 | Group | Routes | Layout |
 |---|---|---|
 | `(public)` | `/`, `/find-care`, `/about`, `/services` | `PublicHeader` + `PublicFooter`; bodies rebuilt in 4B |
-| `(auth)` | `/sign-in`, `/verify`, `/reset`, `/account` | `AuthShell` (4A, done) |
+| `(auth)` | `/sign-in`, `/sign-up/provider`, `/verify`, `/reset`, `/account` | `AuthShell` (4A, done; provider sign-up added 2026-11-16) |
 | `patient/` | `/patient/*` (9 routes) | ✅ 4C: `patient/layout.tsx` → `PatientWorkspace` (guard + `WorkspaceShell`) |
 | `admin/` | `/admin/*` (11 routes) | ✅ 4E: `admin/layout.tsx` → `AdminWorkspace` (role-chosen menu + `WorkspaceShell`) |
 | `laboratory/` | `/laboratory/*` (8 routes) | ✅ 4F: `laboratory/layout.tsx` → `LaboratoryWorkspace` (LABORATORY guard + `WorkspaceShell`) |

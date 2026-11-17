@@ -146,7 +146,7 @@ The current API preserves its established success response bodies for frontend c
 
 | Group        | Example endpoints                                                             |
 | ------------ | ----------------------------------------------------------------------------- |
-| Auth         | `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password/verify`, `/api/v1/auth/reset-password` |
+| Auth         | `/api/v1/auth/register` (optional `accountType` `PATIENT`/`PROVIDER`), `/api/v1/auth/login`, `/api/v1/auth/session` (`email`, `role`, `accountType`), `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password/verify`, `/api/v1/auth/reset-password` |
 | Patient      | `/api/v1/patients/me/profile`, `/api/v1/patients/me/records`, `/api/v1/patients/{patientAccountId}/records`, `/api/v1/patients/me/record-consents` |
 | Provider     | `/api/v1/providers` (approved directory), `/api/v1/providers/applications`, `/api/v1/providers/me/application`, `/api/v1/providers/me/availability`, `/api/v1/providers/{id}/availability` |
 | Appointment  | `/api/v1/appointments`, `/api/v1/appointments/{id}` (patient requests remain pending until provider confirmation) |
@@ -157,7 +157,7 @@ The current API preserves its established success response bodies for frontend c
 | Home Care    | `/api/v1/home-care-requests`, `/api/v1/partner/service-requests/{id}/schedule` |
 | Lab          | `/api/v1/lab-requests`, `/api/v1/patients/me/lab-results`, `/api/v1/patients/{id}/lab-results/pending`, `/api/v1/lab-results/{id}/review` |
 | Partner work | `/api/v1/partner/service-requests` (assigned `HOME_CARE` / `LABORATORY` work) |
-| Notification | `/api/v1/notifications`, `/api/v1/notifications/{id}/read`                    |
+| Notification | `/api/v1/notifications` (optional `eventType` filter), `/api/v1/notifications/{id}/read` |
 | Admin        | `/api/v1/admin/dashboard`, `/api/v1/admin/providers/pending`                  |
 
 Availability is represented by explicit future instants (ISO-8601 timestamps), not recurring schedules. Providers may

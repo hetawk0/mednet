@@ -43,7 +43,14 @@ H2 jar comes from the local Maven cache (it is a test dependency).
 in `_test` (see `docs/POSTGRESQL_SETUP.md`) and replace the two `MEDNET_LIVE_H2_*` variables with
 `MEDNET_LIVE_PG_URL` (the JDBC URL), `MEDNET_LIVE_PG_USER`, `MEDNET_LIVE_PG_PASSWORD` and, if `psql` is not on
 the path, `MEDNET_LIVE_PSQL`. `support/live-backend.ts` then writes the stand-in email tokens with `psql`,
-passing the password through the environment; it refuses any database whose name does not end in `_test`.
+passing the password through the environment; it refuses any database whose name does not end in `_test`,
+and any host other than `localhost`, `127.0.0.1` or `::1` unless `MEDNET_LIVE_PG_ALLOW_REMOTE=1`.
+
+**Use a production build for the web app.** `next dev` runs effects twice (React Strict Mode), so the
+one-time `/verify?token=` link is consumed by the first request and the page shows the second request's
+"invalid or expired" error even though the account was verified. A production build only proxies `/api/*`
+in development, so put a same-origin reverse proxy in front of `next start` (as LPAD/nginx does in
+production).
 
 Because email delivery is off, `support/live-backend.ts` stands in for the inbox: it stores a known
 verification token or reset code in the disposable database, hashed the way `AuthTokenService`
@@ -87,6 +94,20 @@ profiles, and a provider account with a pending application. The doctor acts in 
 patients act in `/patient` or through their own API sessions; every outcome is checked from both
 sides. Requires the Phase 4D API (appointment responses with `providerId` and `rescheduleRequestedBy`).
 Run with `--workers=1`.
+
+### Provider sign-up and onboarding (`provider-onboarding.live.spec.ts`)
+
+Same admin variables plus a disposable database (`MEDNET_LIVE_H2_*` or `MEDNET_LIVE_PG_*`); only the first
+test runs without one. Each viewport project registers its own applicant through `/sign-up/provider`,
+verifies by the stand-in link, signs in to onboarding, submits professional details, and is then
+rejected, resubmits, approved and suspended by the administrator through the real API. After every
+decision it checks that a copy of the applicant's previous session cookie is refused (`401`) and that
+the next sign-in carries the new role. Provider-only endpoints (`/providers/me/patients`,
+`/providers/me/lab-review-queue`, availability publishing, another patient's records and vitals) are
+probed with the applicant's own cookies at every stage. Decision notices are checked to reach only the
+applicant, and the last test reads `notification_email_outbox` to confirm the queued emails are addressed
+only to the applicant and none reached `SENT`. Start the API with `EKDSEND_API_KEY=` (blank) so no email
+can leave the machine. Run with `--workers=1`.
 
 ### Administration (`admin.live.spec.ts`)
 
