@@ -1,0 +1,4 @@
+{
+  "name": "mednet",
+  "healthCheckTimeout": 120
+}
