@@ -191,7 +191,11 @@ public class SecurityConfig {
                         // The public provider directory, one provider's entry, specialty counts and open times.
                         .requestMatchers(HttpMethod.GET, "/api/v1/providers", "/api/v1/providers/*", "/api/v1/providers/*/availability")
                         .permitAll()
-                        .requestMatchers("/oauth2/authorization/**", "/login/oauth2/code/**")
+                        .requestMatchers(
+                                "/oauth2/authorization/**",
+                                "/login/oauth2/code/**",
+                                "/api/v1/auth/oauth2/callback/**",
+                                "/api/v1/auth/oauth2/authorization/**")
                         .permitAll()
                         .requestMatchers("/api/v1/admin/**", "/api/v1/auth/admin/**")
                         .hasAnyRole("ADMIN", "SUPER_ADMIN")

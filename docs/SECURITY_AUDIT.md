@@ -158,12 +158,13 @@ client ID or secret). Do not enable Google sign-in in production until the steps
 
 - **Client:** Google Cloud OAuth client of type *Web application*; scopes `openid`, `email`,
   `profile`; consent screen in testing mode with named test users for development.
-- **Redirect URI:** exactly `GOOGLE_REDIRECT_URI`, `https://<public-origin>/api/v1/auth/oauth2/callback/google`
-  in production (the proxy sends `/api/*` to the API); `http://localhost:8080/api/v1/auth/oauth2/callback/google`
-  for a local API. Authorized JavaScript origins are not needed (server-side flow).
+- **Redirect URI:** `GOOGLE_REDIRECT_URI`, or `https://<public-origin>/login/oauth2/code/google` when unset.
+  Production must match the value registered in Google Cloud (also reachable via
+  `GET /api/v1/auth/oauth2/callback/google`, which forwards to Spring’s callback). Local development:
+  `http://localhost:3000/login/oauth2/code/google`. Authorized JavaScript origins are not needed (server-side flow).
 - **Settings:** `GOOGLE_OAUTH_ENABLED=true`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (secret store
   only), `GOOGLE_REDIRECT_URI`; a database must be configured.
-- **Flow:** `GET /api/v1/auth/oauth2/authorization/google` → Google → callback. Spring Security checks
+- **Flow:** `GET /oauth2/authorization/google` (alias under `/api/v1/auth/oauth2/authorization/google`) → Google → callback. Spring Security checks
   `state` and the ID token (issuer, audience, signature from Google's keys, nonce).
 - **Role landing pages:** `ADMIN`/`SUPER_ADMIN` → `/admin`, `PATIENT` → `/patient`, approved provider →
   `/provider`, `LABORATORY` → `/laboratory`, otherwise `/account`. Fixed paths, no redirect parameter.

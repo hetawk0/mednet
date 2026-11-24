@@ -217,6 +217,19 @@ class MedNetApplicationTests {
     }
 
     @Test
+    void googleOauthAliasPathsForwardWithoutRequiringASession() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(header().string("Location", "/oauth2/authorization/google"));
+
+        mockMvc.perform(get("/api/v1/auth/oauth2/callback/google")
+                        .queryParam("state", "test")
+                        .queryParam("code", "unused"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(header().string("Location", "/login/oauth2/code/google?state=test&code=unused"));
+    }
+
+    @Test
     void databasePoolIsBoundedAndFlywayRetriesTemporaryConnectionExhaustion() {
         assertThat(dataSource.getMaximumPoolSize()).isEqualTo(2);
         assertThat(dataSource.getMinimumIdle()).isZero();

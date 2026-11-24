@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { PublicAccountMenu } from "./public-account-menu";
 import { PUBLIC_HEADER_LINKS } from "./public-nav";
 import { Wordmark } from "./wordmark";
 
@@ -42,12 +43,7 @@ export function PublicHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2.5 pl-3">
-          <Link
-            href="/sign-in"
-            className="hidden min-h-11 items-center rounded-sm px-5 text-button font-bold text-green-800 hover:bg-action-subtle md:inline-flex"
-          >
-            Sign in
-          </Link>
+          <PublicAccountMenu layout="bar" />
           <Link
             href="/find-care"
             className="inline-flex min-h-10 items-center rounded-sm bg-action px-3 text-caption font-bold text-white hover:bg-action-hover md:min-h-11 md:px-5 md:text-button"
@@ -85,15 +81,7 @@ export function PublicHeader() {
               </Link>
             </li>
           ))}
-          {/* Sign in is in the bar itself from 768px. */}
-          <li className="md:hidden">
-            <Link
-              href="/sign-in"
-              className="flex min-h-11 items-center border-b border-line-soft text-body font-semibold text-ink"
-            >
-              Sign in
-            </Link>
-          </li>
+          <PublicAccountMenu layout="mobile" />
         </ul>
       </nav>
     </header>
